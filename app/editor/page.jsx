@@ -154,7 +154,12 @@ export default function EditorPage() {
             className="aspect-video flex items-center justify-center"
             style={{ height: "450px" }}
           >
-            <Canvas setCanvasRef={setCanvasRef} />
+            <Canvas
+              setCanvasRef={setCanvasRef}
+              setShowTextToolbar={() => {}}
+              onTextEdit={() => {}}
+              setIsTextEditing={() => {}}
+            />
           </div>
         </div>
 

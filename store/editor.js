@@ -404,4 +404,48 @@ export const useEditorStore = create((set, get) => ({
   setMobileRightOpen: (isOpen) => set({ mobileRightOpen: isOpen }),
   togglePlatformPreview: () =>
     set((state) => ({ showPlatformPreview: !state.showPlatformPreview })),
+
+  // 텍스트 요소 추가
+  addTextElement: (textProps = {}) => {
+    const state = get();
+
+    // 텍스트 요소의 기본 속성과 전달받은 속성 병합
+    const newTextElement = {
+      id: generateId(),
+      type: "text",
+      text: textProps.text || "텍스트를 입력하세요",
+      x: textProps.x !== undefined ? textProps.x : 100,
+      y: textProps.y !== undefined ? textProps.y : 100,
+      width: textProps.width || 200,
+      fontSize: textProps.fontSize || 24,
+      fontFamily: textProps.fontFamily || "Arial",
+      fill: textProps.fill || "#000000",
+      textAlign: textProps.textAlign || "left",
+      fontWeight: textProps.fontWeight || "normal",
+      fontStyle: textProps.fontStyle || "normal",
+      stroke: textProps.stroke || "",
+      strokeWidth: textProps.strokeWidth || 0,
+      opacity: textProps.opacity !== undefined ? textProps.opacity : 1,
+      scaleX: textProps.scaleX || 1,
+      scaleY: textProps.scaleY || 1,
+      rotation: textProps.rotation || 0,
+      ...textProps,
+    };
+
+    // 요소 배열에 새 텍스트 요소 추가
+    const updatedElements = [...state.elements, newTextElement];
+
+    // 상태 업데이트 및 히스토리에 저장
+    set({
+      elements: updatedElements,
+      selectedElementId: newTextElement.id, // 추가된 텍스트 요소를 자동 선택
+    });
+
+    // 상태 저장
+    setTimeout(() => {
+      get().saveState();
+    }, 100);
+
+    return newTextElement;
+  },
 }));
