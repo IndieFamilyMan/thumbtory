@@ -418,44 +418,17 @@ export default function Canvas({
         if (e.target && e.target.type === "textbox") {
           console.log("텍스트 더블클릭 - 편집 모드 진입:", e.target.id);
           try {
-            // 선택된 요소 ID 설정
-            setSelectedElementId(e.target.id);
-
             // 텍스트 객체를 최상위로 이동
             canvas.bringObjectToFront(e.target);
 
-            // 편집 모드 활성화를 위한 추가 작업
-            // 객체가 활성화되어 있는지 확인하고, 아니라면 활성화
-            if (canvas.getActiveObject() !== e.target) {
-              canvas.setActiveObject(e.target);
-            }
-
-            // 위치 및 크기 정보 저장 (편집 중 자리 이동 방지)
-            const origLeft = e.target.left;
-            const origTop = e.target.top;
-
-            // 편집 모드 진입
+            // 텍스트 편집 모드 진입
             e.target.enterEditing();
 
-            // 포커스 유지 확인
-            if (e.target.hiddenTextarea) {
-              setTimeout(() => {
-                e.target.hiddenTextarea.focus();
-              }, 10);
-            }
-
-            // 텍스트 전체 선택 (선택 기능이 있는 경우에만)
+            // 텍스트 전체 선택
             if (typeof e.target.selectAll === "function") {
-              setTimeout(() => {
-                e.target.selectAll();
-              }, 50);
+              e.target.selectAll();
             }
 
-            // 위치 고정
-            e.target.left = origLeft;
-            e.target.top = origTop;
-
-            // 캔버스 렌더링
             canvas.renderAll();
           } catch (err) {
             console.error("텍스트 편집 모드 진입 중 오류:", err);
@@ -468,43 +441,12 @@ export default function Canvas({
     const setupTextEditingEvents = (canvas) => {
       if (!canvas) return;
 
-      // hiddenTextarea의 포커스 유지를 위한 함수
-      const maintainFocus = (textObject) => {
-        if (!textObject || !textObject.isEditing) return;
-
-        try {
-          if (
-            textObject.hiddenTextarea &&
-            document.activeElement !== textObject.hiddenTextarea
-          ) {
-            textObject.hiddenTextarea.focus();
-          }
-        } catch (err) {
-          console.error("포커스 유지 중 오류:", err);
-        }
-      };
-
-      // 주기적으로 포커스 확인
-      const focusInterval = setInterval(() => {
-        const activeObject = canvas.getActiveObject();
-        if (
-          activeObject &&
-          activeObject.type === "textbox" &&
-          activeObject.isEditing
-        ) {
-          maintainFocus(activeObject);
-        }
-      }, 100);
-
       // 텍스트 편집 시작 시 이벤트
       canvas.on("text:editing:entered", (e) => {
         try {
           const textObject = e.target;
           if (textObject) {
             console.log("텍스트 편집 시작:", textObject.id);
-
-            // 원본 텍스트 저장 (변경 감지용)
-            textObject._originalText = textObject.text;
 
             // 편집 상태 설정
             setIsTextEditing(true);
@@ -523,12 +465,6 @@ export default function Canvas({
 
             // 객체를 앞으로 가져오기
             canvas.bringObjectToFront(textObject);
-
-            // 포커스 확보 확인
-            setTimeout(() => {
-              maintainFocus(textObject);
-            }, 10);
-
             canvas.renderAll();
           }
         } catch (err) {
@@ -555,24 +491,11 @@ export default function Canvas({
               setShowTextToolbar(false);
             }
 
-            // 텍스트가 변경되었는지 확인
-            if (textObject._originalText !== textObject.text) {
-              console.log(
-                "텍스트 변경됨:",
-                textObject._originalText,
-                "->",
-                textObject.text
-              );
-
-              // 텍스트 내용 업데이트
-              if (textObject.id) {
-                updateElementProperty(textObject.id, "text", textObject.text);
-                saveState();
-              }
+            // 텍스트 내용 업데이트
+            if (textObject.id) {
+              updateElementProperty(textObject.id, "text", textObject.text);
+              saveState();
             }
-
-            // 원본 텍스트 참조 제거
-            delete textObject._originalText;
 
             canvas.renderAll();
           }
@@ -588,76 +511,43 @@ export default function Canvas({
           if (textObject && textObject.id) {
             console.log("텍스트 변경:", textObject.id, textObject.text);
 
-            // 텍스트 내용 즉시 업데이트 (실시간 반영)
+            // 텍스트 내용 즉시 업데이트
             updateElementProperty(textObject.id, "text", textObject.text);
-
-            // 포커스 확보 확인
-            maintainFocus(textObject);
           }
         } catch (err) {
           console.error("텍스트 변경 처리 중 오류:", err);
         }
       });
 
-      // 키 이벤트 처리를 위한 핸들러
-      const handleKeyDown = (e) => {
-        const activeObject = canvas.getActiveObject();
+      // IME 입력 처리
+      const onCompositionStart = () => {
         if (
-          !activeObject ||
-          activeObject.type !== "textbox" ||
-          !activeObject.isEditing
-        )
-          return;
-
-        // ESC 키는 편집 모드 종료
-        if (e.key === "Escape") {
-          activeObject.exitEditing();
-          canvas.renderAll();
-          return;
-        }
-
-        // 포커스 확보 확인
-        maintainFocus(activeObject);
-
-        // IME 조합 중 표시
-        if (e.isComposing) {
-          console.log("IME 조합 중...");
-          activeObject._isComposing = true;
+          canvas.getActiveObject() &&
+          canvas.getActiveObject().type === "text"
+        ) {
+          canvas.getActiveObject().isEditing = true;
         }
       };
 
-      const handleKeyUp = (e) => {
-        const activeObject = canvas.getActiveObject();
+      const onCompositionEnd = () => {
         if (
-          !activeObject ||
-          activeObject.type !== "textbox" ||
-          !activeObject.isEditing
-        )
-          return;
-
-        // IME 조합 완료 감지
-        if (!e.isComposing && activeObject._isComposing) {
-          console.log("IME 조합 완료:", activeObject.text);
-          activeObject._isComposing = false;
-
-          // 텍스트 내용 업데이트
-          updateElementProperty(activeObject.id, "text", activeObject.text);
+          canvas.getActiveObject() &&
+          canvas.getActiveObject().type === "text"
+        ) {
+          const textObject = canvas.getActiveObject();
+          updateElementProperty(textObject.id, "text", textObject.text);
+          textObject.isEditing = false;
           canvas.renderAll();
         }
-
-        // 포커스 확보 확인
-        maintainFocus(activeObject);
       };
 
-      // 전역 이벤트 리스너 추가
-      document.addEventListener("keydown", handleKeyDown);
-      document.addEventListener("keyup", handleKeyUp);
+      // IME 이벤트 리스너 등록
+      document.addEventListener("compositionstart", onCompositionStart);
+      document.addEventListener("compositionend", onCompositionEnd);
 
-      // 정리 함수 반환
       return () => {
-        clearInterval(focusInterval);
-        document.removeEventListener("keydown", handleKeyDown);
-        document.removeEventListener("keyup", handleKeyUp);
+        document.removeEventListener("compositionstart", onCompositionStart);
+        document.removeEventListener("compositionend", onCompositionEnd);
       };
     };
 
@@ -783,14 +673,6 @@ export default function Canvas({
         selectionLineWidth: 1,
         hoverCursor: "pointer",
         defaultCursor: "default",
-        isDrawingMode: false,
-        centeredScaling: true,
-        centeredRotation: true,
-        altActionKey: "shift", // shift 키를 누르면 대체 동작 수행
-        uniScaleKey: "shift", // shift 키를 누르면 균일 스케일링
-        stopContextMenu: true, // 기본 컨텍스트 메뉴 방지
-        fireRightClick: true, // 오른쪽 클릭 이벤트 발생
-        selection: true, // 선택 기능 활성화
       });
 
       // 캔버스 참조 저장
@@ -800,69 +682,6 @@ export default function Canvas({
       // 전역 접근을 위한 인스턴스 저장 (내보내기에서 사용)
       window.fabricCanvasInstance = canvas;
       document.__EDITOR_FABRIC_CANVAS__ = canvas;
-
-      // Textbox 클래스 확장 설정 (한글 IME 지원 개선)
-      try {
-        // Textbox의 이전 프로토타입 저장
-        const originalEnterEditing = Textbox.prototype.enterEditing;
-        const originalExitEditing = Textbox.prototype.exitEditing;
-
-        // 편집 시작 함수 재정의
-        Textbox.prototype.enterEditing = function (e) {
-          if (this.isEditing) {
-            return;
-          }
-
-          console.log("텍스트 편집 시작 - 확장 메소드");
-
-          // 원본 함수 호출
-          const result = originalEnterEditing.call(this, e);
-
-          // 편집 중인 상태 추가 표시
-          this._isBeingEdited = true;
-
-          // 히든 입력 필드에 포커스
-          if (this.hiddenTextarea) {
-            setTimeout(() => {
-              this.hiddenTextarea.focus();
-            }, 10);
-          }
-
-          // 이벤트 발생
-          canvas.fire("text:editing:entered", { target: this });
-
-          return result;
-        };
-
-        // 편집 종료 함수 재정의
-        Textbox.prototype.exitEditing = function () {
-          if (!this.isEditing) {
-            return;
-          }
-
-          console.log("텍스트 편집 종료 - 확장 메소드");
-
-          this._isBeingEdited = false;
-
-          // 이벤트 발생 (원본 호출 전에)
-          const beforeText = this.text;
-
-          // 원본 함수 호출
-          const result = originalExitEditing.call(this);
-
-          // 이벤트 발생 (종료 후)
-          canvas.fire("text:editing:exited", {
-            target: this,
-            beforeText: beforeText,
-          });
-
-          return result;
-        };
-
-        console.log("Textbox 클래스 확장 완료");
-      } catch (err) {
-        console.error("Textbox 클래스 확장 중 오류:", err);
-      }
 
       // 캔버스 이벤트 리스너 설정
       setupCanvasEventListeners(canvas);
@@ -1917,21 +1736,13 @@ export default function Canvas({
             const scaleToWidth = objectWidth / img.width;
             const scaleToHeight = objectHeight / img.height;
             let scaleX, scaleY;
-
-            if (objectRatio > imgRatio) {
-              // 요소가 이미지보다 가로가 넓은 경우
-              scaleX = objectWidth / img.width;
-              scaleY = scaleX; // 비율 유지
-            } else {
-              // 요소가 이미지보다 세로가 높은 경우
-              scaleY = objectHeight / img.height;
-              scaleX = scaleY; // 비율 유지
-            }
+            scaleX = Math.max(scaleToWidth, scaleToHeight);
+            scaleY = scaleX; // 비율 유지
 
             console.log("계산된 스케일 - X:", scaleX, "Y:", scaleY);
 
             // 추가 확대 적용
-            const extraScale = 1.1; // 10% 추가 확대
+            const extraScale = 1.0; // 추가 확대 없이 원본 비율 유지
             scaleX *= extraScale;
             scaleY *= extraScale;
 
@@ -2053,20 +1864,14 @@ export default function Canvas({
               // 이미지를 캔버스에 꽉 차게 표시 (CSS의 cover 방식)
               let scaleX, scaleY;
 
-              if (canvasRatio > imgRatio) {
-                // 캔버스가 이미지보다 가로로 더 넓은 경우, 가로 기준으로 맞춤
-                scaleX = canvasWidth / img.width;
-                scaleY = scaleX; // 비율 유지
-              } else {
-                // 캔버스가 이미지보다 세로로 더 높은 경우, 세로 기준으로 맞춤
-                scaleY = canvasHeight / img.height;
-                scaleX = scaleY; // 비율 유지
-              }
+              // 항상 캔버스 너비에 맞추어 스케일 계산
+              scaleX = canvasWidth / img.width;
+              scaleY = scaleX; // 비율 유지
 
               console.log("계산된 스케일 - X:", scaleX, "Y:", scaleY);
 
               // 추가 확대 적용
-              const extraScale = 1.2; // 20% 추가 확대로 여백 없이 채움
+              const extraScale = 1.5; // 50% 추가 확대로 여백 없이 채움
               scaleX *= extraScale;
               scaleY *= extraScale;
 
@@ -2100,6 +1905,12 @@ export default function Canvas({
 
               // 배경 이미지로 직접 설정
               canvas.backgroundImage = fabricImage;
+
+              // 배경 이미지의 위치를 오른쪽으로 조정
+              canvas.backgroundImage.left = canvasWidth / 2 + 100; // 오른쪽으로 100px 이동
+              canvas.backgroundImage.top = canvasHeight / 2;
+              canvas.backgroundImage.originX = "center";
+              canvas.backgroundImage.originY = "center";
 
               console.log("=== 이미지 설정 완료 ===");
               console.log(
