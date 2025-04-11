@@ -31,10 +31,13 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
   const [fitMode, setFitMode] = useState("contain"); // 'contain' 또는 'cover' 모드
   const [bgMode, setBgMode] = useState("white"); // 'white', 'transparent', 'dark', 'webp' 모드
   const [fileInfos, setFileInfos] = useState({});
-  const [wordpressFillScreen, setWordpressFillScreen] = useState(true); // 워드프레스 화면 꽉 채우기 옵션
+  const [wordpressFillScreen, setWordpressFillScreen] = useState(true); // 워드프레스 화면 꽉 채우기 옵션 (기본값 true)
   const previewsRef = useRef({});
   const generationAttemptRef = useRef(0);
   const loadingTypeRef = useRef(null); // 현재 어떤 타입의 버튼이 로딩 중인지 추적
+
+  // 중요: 워드프레스 이동 디버깅용 플래그
+  const debugWordpressMove = useRef(true);
 
   // 다크 모드 배경색 값 (globals.css에서 가져온 값)
   const darkBgColor = "#0F172A"; // RGB 15 23 42 값의 헥스 코드
@@ -52,6 +55,11 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
     // 워드프레스 모드 감지 함수 추가
     window.__EDITOR_STATE_HANDLER__.isWordpressMode = () => {
       return newValue;
+    };
+
+    // 워드프레스 모드의 fitMode 반환 함수 추가
+    window.__EDITOR_STATE_HANDLER__.getWordpressFitMode = () => {
+      return newValue ? "cover" : "contain";
     };
 
     // 설정 로컬 스토리지에 저장
@@ -89,13 +97,102 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
     window.__EDITOR_STATE_HANDLER__.isWordpressMode = () => {
       return wordpressFillScreen;
     };
+
+    // 워드프레스 모드의 fitMode 반환 함수 추가
+    window.__EDITOR_STATE_HANDLER__.getWordpressFitMode = () => {
+      return wordpressFillScreen ? "cover" : "contain";
+    };
   }, []);
 
-  // 워드프레스 플랫폼에 대한 특별 처리 함수 추가
+  // 요소 이동을 위한 대상 객체 찾기 함수
+  const findTargetObjects = (canvas, excludeBackgroundImage = true) => {
+    if (!canvas || !canvas.getObjects) {
+      console.error("❌ 유효하지 않은 캔버스 객체");
+      return [];
+    }
+
+    try {
+      // 모든 캔버스 객체
+      const allObjects = canvas.getObjects();
+      console.log(`🔎 캔버스에서 총 ${allObjects.length}개 객체 발견`);
+
+      // 배경 이미지 찾기
+      const backgroundImage = excludeBackgroundImage
+        ? canvas.backgroundImage
+        : null;
+
+      // 제외할 객체 ID 패턴 목록
+      const excludedIdPatterns = [
+        "grid-",
+        "guide-",
+        "canvas-border",
+        "drop-icon",
+        "size-info",
+      ];
+
+      // 이동 가능한 객체 필터링
+      const moveableObjects = allObjects.filter((obj) => {
+        // 객체가 유효한지 확인
+        if (!obj) return false;
+
+        // 보이지 않는 객체 제외
+        if (obj.visible === false) return false;
+
+        // 배경 이미지와 동일한 객체 제외
+        if (backgroundImage && obj === backgroundImage) return false;
+
+        // 특정 ID 패턴을 가진 객체 제외
+        if (obj.id) {
+          for (const pattern of excludedIdPatterns) {
+            if (obj.id.startsWith(pattern)) return false;
+          }
+        }
+
+        // 이미지, 텍스트, 도형 등의 실제 컨텐츠 요소만 포함
+        return true;
+      });
+
+      console.log(`✅ 이동 가능한 객체 ${moveableObjects.length}개 찾음`);
+
+      // 디버깅 정보 로깅
+      moveableObjects.forEach((obj, index) => {
+        console.log(`🔹 이동 가능 객체 #${index}: ${obj.type}`, {
+          id: obj.id || "ID 없음",
+          위치: { left: obj.left, top: obj.top },
+          크기: {
+            width: obj.width * (obj.scaleX || 1),
+            height: obj.height * (obj.scaleY || 1),
+          },
+          visible: obj.visible,
+        });
+      });
+
+      return moveableObjects;
+    } catch (err) {
+      console.error("❌ 이동 가능 객체 찾기 중 오류:", err);
+      return [];
+    }
+  };
+
+  // 워드프레스 플랫폼에 대한 특별 처리 함수 수정
   const applyWordpressStyle = (canvas, platform) => {
     try {
+      console.log(`👋 워드프레스 스타일 적용 시작 - 플랫폼 ID: ${platform.id}`);
+
       // 워드프레스에서는 배경 이미지를 화면에 꽉 채움
       const backgroundImage = canvas.backgroundImage;
+
+      // 디버깅: 배경 이미지 확인
+      if (backgroundImage) {
+        console.log("✅ 배경 이미지 찾음", {
+          width: backgroundImage.width,
+          height: backgroundImage.height,
+          scaleX: backgroundImage.scaleX,
+          scaleY: backgroundImage.scaleY,
+        });
+      } else {
+        console.log("❌ 배경 이미지 없음");
+      }
 
       if (backgroundImage) {
         const canvasWidth = canvas.width;
@@ -110,13 +207,14 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
         // 비율에 따라 이미지 스케일 조정
         let scaleX, scaleY;
 
+        // 항상 꽉채움(cover) 모드로 처리
         if (canvasRatio > imgRatio) {
           // 캔버스가 이미지보다 가로로 넓은 경우, 너비에 맞춤
           scaleX = canvasWidth / backgroundImage.width;
           scaleY = scaleX; // 비율 유지
 
-          // 추가 확대로 꽉 채우기 (워드프레스는 1.5배 확대)
-          const extraScale = 1.5;
+          // 이미지가 가로로 꽉 차도록 확대
+          const extraScale = 1.0; // 1.0으로 설정하여 가로 폭을 정확히 맞춤
           scaleX *= extraScale;
           scaleY *= extraScale;
         } else {
@@ -124,8 +222,8 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
           scaleY = canvasHeight / backgroundImage.height;
           scaleX = scaleY; // 비율 유지
 
-          // 추가 확대로 꽉 채우기 (20% 더 확대)
-          const extraScale = 1.2;
+          // 이미지가 세로로 꽉 차도록 확대
+          const extraScale = 1.0; // 1.0으로 설정하여 세로 높이를 정확히 맞춤
           scaleX *= extraScale;
           scaleY *= extraScale;
         }
@@ -142,6 +240,162 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
 
         // 캔버스 업데이트
         canvas.renderAll();
+      }
+
+      // 워드프레스 플랫폼인 경우 모든 요소들을 안쪽으로 이동
+      if (platform.id === "wordpress") {
+        console.log("🔍 워드프레스 요소 이동 시작", {
+          플랫폼: platform.id,
+          캔버스크기: { width: canvas.width, height: canvas.height },
+          객체수: canvas.getObjects().length,
+        });
+
+        // 안전 영역 계산 (캔버스 크기의 20%)
+        const safeZoneX = canvas.width * 0.2;
+        const safeZoneY = canvas.height * 0.2;
+
+        // 모든 객체 정보 출력하여 디버깅
+        const allObjects = canvas.getObjects();
+        console.log(`📋 캔버스에 있는 총 객체 수: ${allObjects.length}`);
+
+        allObjects.forEach((obj, index) => {
+          console.log(`객체 #${index}:`, {
+            type: obj.type,
+            id: obj.id || "ID 없음",
+            visible: obj.visible,
+            width: obj.width,
+            height: obj.height,
+            scaleX: obj.scaleX,
+            scaleY: obj.scaleY,
+          });
+        });
+
+        // 이동 가능한 객체 판별
+        const moveableObjects = allObjects.filter((obj) => {
+          const isExcluded =
+            obj === backgroundImage ||
+            obj.id === "canvas-border" ||
+            obj.id?.startsWith("grid-") ||
+            obj.id === "guide-text" ||
+            obj.id === "drop-icon" ||
+            !obj.visible;
+
+          return !isExcluded;
+        });
+
+        console.log(`🚶 이동 가능한 객체 수: ${moveableObjects.length}`);
+
+        // 이동된 객체 카운터
+        let movedCount = 0;
+
+        // 모든 객체들을 순회하며 처리
+        moveableObjects.forEach((obj) => {
+          // 객체 현재 위치 확인
+          const objWidth = obj.width * (obj.scaleX || 1);
+          const objHeight = obj.height * (obj.scaleY || 1);
+
+          // 요소 정보 로깅 (이동 전)
+          console.log(
+            `워드프레스 요소 확인 - ${obj.type} (ID: ${obj.id || "없음"})`,
+            {
+              위치: {
+                left: obj.left,
+                top: obj.top,
+                right: obj.left + objWidth,
+                bottom: obj.top + objHeight,
+              },
+              크기: {
+                width: objWidth,
+                height: objHeight,
+              },
+              visible: obj.visible,
+              안전영역: {
+                좌측: safeZoneX,
+                우측: canvas.width - safeZoneX,
+                상단: safeZoneY,
+                하단: canvas.height - safeZoneY,
+              },
+            }
+          );
+
+          // 객체가 가장자리에 너무 가까운지 확인하고 필요시 이동
+          let adjustX = 0;
+          let adjustY = 0;
+
+          // 왼쪽 가장자리에 너무 가까운 경우
+          if (obj.left < safeZoneX) {
+            adjustX = safeZoneX - obj.left;
+          }
+          // 오른쪽 가장자리에 너무 가까운 경우
+          else if (obj.left + objWidth > canvas.width - safeZoneX) {
+            adjustX = canvas.width - safeZoneX - objWidth - obj.left;
+          }
+
+          // 위쪽 가장자리에 너무 가까운 경우
+          if (obj.top < safeZoneY) {
+            adjustY = safeZoneY - obj.top;
+          }
+          // 아래쪽 가장자리에 너무 가까운 경우
+          else if (obj.top + objHeight > canvas.height - safeZoneY) {
+            adjustY = canvas.height - safeZoneY - objHeight - obj.top;
+          }
+
+          // 위치 변경이 필요한 경우에만 적용
+          if (adjustX !== 0 || adjustY !== 0) {
+            console.log(
+              `↕️ 요소 이동 실행 - ${obj.type} (ID: ${obj.id || "없음"})`,
+              {
+                원래위치: { left: obj.left, top: obj.top },
+                조정값: { x: adjustX, y: adjustY },
+                새위치: {
+                  left: obj.left + adjustX,
+                  top: obj.top + adjustY,
+                },
+              }
+            );
+
+            // 이동 전 위치 저장
+            const oldLeft = obj.left;
+            const oldTop = obj.top;
+
+            obj.set({
+              left: obj.left + adjustX,
+              top: obj.top + adjustY,
+            });
+
+            // 이동 후 실제 변경됐는지 확인 (fabric.js 버그 체크)
+            const moved = oldLeft !== obj.left || oldTop !== obj.top;
+            if (moved) {
+              movedCount++;
+              console.log(
+                `✅ 요소 이동 성공 - 새위치: { left: ${obj.left}, top: ${obj.top} }`
+              );
+            } else {
+              console.log(`❌ 요소 이동 실패 - 위치 변경 안됨`);
+            }
+          } else {
+            console.log(
+              `워드프레스 요소 이동 불필요 - ${obj.type} (ID: ${
+                obj.id || "없음"
+              })`,
+              {
+                이유: "객체가 이미 안전 영역 내에 위치함",
+                위치: {
+                  left: obj.left,
+                  top: obj.top,
+                  width: objWidth,
+                  height: objHeight,
+                },
+              }
+            );
+          }
+        });
+
+        // 변경사항 적용
+        canvas.renderAll();
+        console.log(
+          `🏁 워드프레스 플랫폼 요소 이동 완료 - 총 ${movedCount}개 객체 이동됨`
+        );
       }
 
       return canvas;
@@ -201,8 +455,8 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
 
       if (hasWordpress) {
         console.log("워드프레스 플랫폼 특별 처리:", {
-          fillScreen: wordpressFillScreen,
-          fitMode: wordpressFillScreen ? "cover" : fitModeParam,
+          fillScreen: true, // 항상 꽉채움 모드 사용
+          fitMode: "cover", // 항상 cover 모드 적용
         });
       }
 
@@ -219,11 +473,9 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
             }
 
             // 플랫폼별 이미지 생성을 위한 설정 결정
-            // 워드프레스는 화면 꽉 채우기 설정에 따라 다른 fitMode 사용
+            // 워드프레스는 항상 꽉채움 모드 사용
             const currentFitMode =
-              platformId === "wordpress" && wordpressFillScreen
-                ? "cover"
-                : fitModeParam;
+              platformId === "wordpress" ? "cover" : fitModeParam;
 
             // 플랫폼별 이미지 생성
             const imageUrl = await generateFullSizeImage(
@@ -236,9 +488,16 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
             if (imageUrl) {
               // 워드프레스 플랫폼 특별 처리
               if (platformId === "wordpress") {
+                // 이미지 URL 저장 전에 요소 위치 확인
+                console.log("워드프레스 플랫폼 이미지 생성 완료:", {
+                  platformId,
+                  fitMode: "cover", // 항상 cover 모드 적용
+                  imageUrlLength: imageUrl ? imageUrl.length : 0,
+                });
+
                 newPreviews[platformId] = {
                   dataUrl: imageUrl,
-                  fitMode: wordpressFillScreen ? "cover" : "contain",
+                  fitMode: "cover", // 항상 꽉채움 모드 사용
                 };
               } else {
                 // 다른 플랫폼들은 기존 방식대로 처리
@@ -462,6 +721,10 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               obj.id === "size-info" ||
               obj.id === "canvas-border")
           ) {
+            objectsToHide.push({
+              object: obj,
+              wasVisible: obj.visible,
+            });
             obj.visible = false;
           }
         });
@@ -598,6 +861,9 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
     const platformWidth = platform.width;
     const platformHeight = platform.height;
 
+    // 워드프레스 플랫폼 특별 처리 플래그
+    const isWordpress = platformId === "wordpress";
+
     try {
       generationAttemptRef.current++;
       const currentAttempt = generationAttemptRef.current;
@@ -663,6 +929,172 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
             // 캔버스 다시 렌더링
             activeCanvas.renderAll();
 
+            // 워드프레스 플랫폼인 경우 특별 처리 (요소들을 안전 영역으로 이동)
+            if (isWordpress && activeCanvas) {
+              try {
+                console.log("🔄 워드프레스 플랫폼 요소 이동 시작", {
+                  플랫폼ID: platform.id,
+                  캔버스유효: !!activeCanvas,
+                  캔버스크기: `${activeCanvas.width}x${activeCanvas.height}`,
+                });
+
+                // fabric.js 캔버스 확인 및 요소 이동 처리
+                if (
+                  activeCanvas &&
+                  typeof activeCanvas.getObjects === "function"
+                ) {
+                  // 이동 가능한 객체 찾기
+                  const moveableObjects = findTargetObjects(activeCanvas);
+
+                  if (moveableObjects.length === 0) {
+                    console.log("⚠️ 이동 가능한 요소가 없습니다");
+                    return;
+                  }
+
+                  // 안전 영역 계산 (캔버스 크기의 25% - 안전 영역 더 넓게 설정)
+                  const safeZoneX = activeCanvas.width * 0.25;
+                  const safeZoneY = activeCanvas.height * 0.25;
+
+                  // 원래 위치 저장
+                  const originalPositions = [];
+                  let movedCount = 0;
+
+                  // 모든 요소 처리
+                  moveableObjects.forEach((obj) => {
+                    if (!obj) return;
+
+                    // 원래 위치 저장
+                    originalPositions.push({
+                      object: obj,
+                      left: obj.left,
+                      top: obj.top,
+                    });
+
+                    // 객체 크기 계산
+                    const objWidth = obj.width * (obj.scaleX || 1);
+                    const objHeight = obj.height * (obj.scaleY || 1);
+
+                    // 각 가장자리에 대한 거리 계산
+                    const distToLeft = obj.left;
+                    const distToRight =
+                      activeCanvas.width - (obj.left + objWidth);
+                    const distToTop = obj.top;
+                    const distToBottom =
+                      activeCanvas.height - (obj.top + objHeight);
+
+                    // 안전 영역 이탈 확인 및 이동 거리 계산
+                    let moveX = 0;
+                    let moveY = 0;
+
+                    if (distToLeft < safeZoneX) moveX = safeZoneX - distToLeft;
+                    else if (distToRight < safeZoneX)
+                      moveX = -(safeZoneX - distToRight);
+
+                    if (distToTop < safeZoneY) moveY = safeZoneY - distToTop;
+                    else if (distToBottom < safeZoneY)
+                      moveY = -(safeZoneY - distToBottom);
+
+                    // 이동이 필요한 경우
+                    if (moveX !== 0 || moveY !== 0) {
+                      console.log(`🔄 요소 이동 시작: ${obj.type}`, {
+                        id: obj.id || "없음",
+                        이동전: { left: obj.left, top: obj.top },
+                        이동량: { x: moveX, y: moveY },
+                      });
+
+                      // 위치 변경 직접 설정
+                      try {
+                        const oldLeft = obj.left;
+                        const oldTop = obj.top;
+
+                        // Fabric.js 객체의 left/top 속성 직접 변경
+                        obj.set({
+                          left: obj.left + moveX,
+                          top: obj.top + moveY,
+                        });
+
+                        // 변경 성공 확인
+                        const moved =
+                          oldLeft !== obj.left || oldTop !== obj.top;
+
+                        if (moved) {
+                          movedCount++;
+                          console.log(`✅ 요소 이동 성공 - ${obj.type}`, {
+                            이전위치: { left: oldLeft, top: oldTop },
+                            새위치: { left: obj.left, top: obj.top },
+                          });
+                        } else {
+                          console.log(
+                            `❌ 요소 이동 실패 - ${obj.type} - 위치가 변경되지 않음`
+                          );
+                        }
+                      } catch (err) {
+                        console.error(`❌ 요소 이동 중 오류: ${obj.type}`, err);
+                      }
+                    }
+                  });
+
+                  // 캔버스 업데이트
+                  activeCanvas.renderAll();
+                  console.log(
+                    `�� 워드프레스 플랫폼 요소 이동 완료: 총 ${movedCount}/${moveableObjects.length}개 이동됨`
+                  );
+
+                  // 이미지 생성 후 요소 위치 복원 설정
+                  window.__WORDPRESS_ORIGINAL_POSITIONS__ = originalPositions;
+
+                  // 이미지 생성 후 원래 위치로 복원하기 위한 타이머
+                  setTimeout(() => {
+                    if (
+                      window.__WORDPRESS_ORIGINAL_POSITIONS__ &&
+                      window.__WORDPRESS_ORIGINAL_POSITIONS__.length > 0
+                    ) {
+                      console.log(
+                        `⏪ 위치 복원 시작: ${window.__WORDPRESS_ORIGINAL_POSITIONS__.length}개 요소`
+                      );
+
+                      // 복원 성공 카운트
+                      let restoredCount = 0;
+
+                      window.__WORDPRESS_ORIGINAL_POSITIONS__.forEach(
+                        (item) => {
+                          if (item.object) {
+                            const oldLeft = item.object.left;
+                            const oldTop = item.object.top;
+
+                            item.object.set({
+                              left: item.left,
+                              top: item.top,
+                            });
+
+                            if (
+                              oldLeft !== item.object.left ||
+                              oldTop !== item.object.top
+                            ) {
+                              restoredCount++;
+                            }
+                          }
+                        }
+                      );
+
+                      if (activeCanvas) {
+                        activeCanvas.renderAll();
+                      }
+
+                      console.log(
+                        `✅ 위치 복원 완료: ${restoredCount}/${window.__WORDPRESS_ORIGINAL_POSITIONS__.length}개 요소`
+                      );
+                      window.__WORDPRESS_ORIGINAL_POSITIONS__ = null;
+                    }
+                  }, 5000); // 더 긴 대기 시간 (5초)
+                } else {
+                  console.error("❌ 유효하지 않은 Fabric.js 캔버스 객체");
+                }
+              } catch (wpError) {
+                console.error("❌ 워드프레스 요소 이동 처리 중 오류:", wpError);
+              }
+            }
+
             // 이미지 생성 후 나중에 복원하기 위해 timeout 설정
             setTimeout(() => {
               objectsToHide.forEach((item) => {
@@ -673,7 +1105,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               if (activeCanvas) {
                 activeCanvas.renderAll();
               }
-            }, 500);
+            }, 1000);
           }
         } catch (e) {
           console.error("가이드 숨기기 중 오류:", e);
@@ -837,7 +1269,82 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                 tempCanvas.width = platformWidth;
                 tempCanvas.height = platformHeight;
 
-                if (fitModeParam === "contain") {
+                // 워드프레스 플랫폼인 경우 특별 처리 (완전히 꽉 채우기)
+                if (platformId === "wordpress") {
+                  console.log("워드프레스 플랫폼 특별 처리 - 완전 꽉채움 모드");
+
+                  // 소스 이미지 크기
+                  const sourceWidth = img.width;
+                  const sourceHeight = img.height;
+
+                  // 대상 캔버스 크기
+                  const targetWidth = platformWidth;
+                  const targetHeight = platformHeight;
+
+                  // 소스와 대상의 비율 계산
+                  const sourceRatio = sourceWidth / sourceHeight;
+                  const targetRatio = targetWidth / targetHeight;
+
+                  let drawWidth,
+                    drawHeight,
+                    sourceX = 0,
+                    sourceY = 0;
+
+                  if (sourceRatio > targetRatio) {
+                    // 이미지가 타겟보다 가로로 더 넓은 경우
+                    // 높이에 맞추고 가로는 중앙 크롭
+                    drawHeight = targetHeight;
+                    drawWidth = targetHeight * sourceRatio;
+
+                    // 화면 꽉 채우기 위해 추가 확대
+                    const scale = 1.05; // 약간 더 크게 확대하여 완전히 채움
+                    drawWidth *= scale;
+                    drawHeight *= scale;
+
+                    // 중앙 정렬을 위한 X 오프셋 계산
+                    const offsetX = (targetWidth - drawWidth) / 2;
+
+                    // 이미지 그리기 - 완전히 꽉 채우기 위해 offsetX 대신 0 사용
+                    tempCtx.drawImage(
+                      img,
+                      0,
+                      0,
+                      sourceWidth,
+                      sourceHeight,
+                      0,
+                      0,
+                      drawWidth,
+                      drawHeight
+                    );
+                  } else {
+                    // 이미지가 타겟보다 세로로 더 긴 경우
+                    // 너비에 맞추고 세로는 중앙 크롭
+                    drawWidth = targetWidth;
+                    drawHeight = targetWidth / sourceRatio;
+
+                    // 화면 꽉 채우기 위해 추가 확대
+                    const scale = 1.05; // 약간 더 크게 확대하여 완전히 채움
+                    drawWidth *= scale;
+                    drawHeight *= scale;
+
+                    // 중앙 정렬을 위한 Y 오프셋 계산
+                    const offsetY = (targetHeight - drawHeight) / 2;
+
+                    // 이미지 그리기 - 완전히 꽉 채우기 위해 offsetY 대신 0 사용
+                    tempCtx.drawImage(
+                      img,
+                      0,
+                      0,
+                      sourceWidth,
+                      sourceHeight,
+                      0,
+                      0,
+                      drawWidth,
+                      drawHeight
+                    );
+                  }
+                } else if (fitModeParam === "contain") {
+                  // 기존 contain 모드 처리 코드...
                   // 비율 유지하면서 이미지 전체가 보이도록
                   let drawWidth, drawHeight, offsetX, offsetY;
 
@@ -1132,17 +1639,20 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
       {/* 옵션 컨트롤 */}
       <div
         className={`flex ${
-          isMobileView ? "flex-col space-y-2" : "justify-between"
-        } mb-3`}
+          isMobileView ? "flex-col space-y-2" : "items-center justify-between"
+        } mb-4 rounded-lg bg-muted/50 p-3`}
       >
-        <div className="flex space-x-2">
-          <div className="flex items-center space-x-1">
-            <label htmlFor="fit-mode" className="text-xs">
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1.5">
+            <label
+              htmlFor="fit-mode"
+              className="text-xs font-medium text-muted-foreground"
+            >
               표시:
             </label>
             <select
               id="fit-mode"
-              className="text-xs p-1 border rounded-md bg-background"
+              className="text-xs p-1.5 border rounded-md bg-background"
               value={fitMode}
               onChange={(e) => handleFitModeChange(e.target.value)}
               disabled={isGenerating}
@@ -1151,13 +1661,16 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               <option value="cover">꽉채움</option>
             </select>
           </div>
-          <div className="flex items-center space-x-1">
-            <label htmlFor="bg-mode" className="text-xs">
+          <div className="flex items-center space-x-1.5">
+            <label
+              htmlFor="bg-mode"
+              className="text-xs font-medium text-muted-foreground"
+            >
               배경:
             </label>
             <select
               id="bg-mode"
-              className="text-xs p-1 border rounded-md bg-background"
+              className="text-xs p-1.5 border rounded-md bg-background"
               value={bgMode}
               onChange={(e) => handleBgModeChange(e.target.value)}
               disabled={isGenerating}
@@ -1168,43 +1681,11 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               <option value="webp">WEBP</option>
             </select>
           </div>
-
-          {/* 워드프레스 옵션 체크박스 추가 */}
-          {platforms.some((p) => p.id === "wordpress" && p.enabled) && (
-            <div className="flex items-center space-x-1 ml-2">
-              <input
-                type="checkbox"
-                id="wordpress-fill"
-                className="w-3 h-3 rounded"
-                checked={wordpressFillScreen}
-                onChange={handleWordpressFillChange}
-                disabled={isGenerating}
-              />
-              <label htmlFor="wordpress-fill" className="text-xs">
-                워드프레스 꽉채움
-              </label>
-            </div>
-          )}
-        </div>
-        <div className="flex space-x-2">
           <button
-            className={`text-xs px-2 py-1 rounded-md ${
-              isGenerating && loadingTypeRef.current === "export-all"
-                ? "bg-muted text-muted-foreground"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
-            }`}
-            onClick={handleExportAll}
-            disabled={isGenerating}
-          >
-            {isGenerating && loadingTypeRef.current === "export-all"
-              ? "처리 중..."
-              : "모두 내보내기"}
-          </button>
-          <button
-            className={`text-xs px-2 py-1 rounded-md ${
+            className={`text-xs px-2.5 py-1.5 rounded-md ml-2 ${
               isGenerating && loadingTypeRef.current === "preview"
                 ? "bg-muted text-muted-foreground"
-                : "bg-muted hover:bg-muted/80"
+                : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
             }`}
             onClick={handleRefreshPreviews}
             disabled={isGenerating}
@@ -1214,59 +1695,103 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               : "새로고침"}
           </button>
         </div>
+        <button
+          className={`text-xs px-3 py-1.5 rounded-md font-medium ${
+            isGenerating && loadingTypeRef.current === "export-all"
+              ? "bg-muted text-muted-foreground"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+          }`}
+          onClick={handleExportAll}
+          disabled={isGenerating}
+        >
+          {isGenerating && loadingTypeRef.current === "export-all"
+            ? "처리 중..."
+            : "모두 내보내기"}
+        </button>
       </div>
 
-      {/* 미리보기 영역 */}
+      {/* 미리보기 영역 - 그리드 레이아웃 적용 */}
       <div
-        className={`space-y-4 ${
-          isMobileView ? "max-h-48 overflow-y-auto" : ""
+        className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${
+          isMobileView ? "max-h-60 overflow-y-auto" : ""
         }`}
       >
         {platforms
           .filter((platform) => platform.enabled)
           .map((platform) => (
-            <div key={platform.id} className="border rounded-md p-2 mb-4">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-sm font-medium">
-                  {platform.name}
-                  {/* 워드프레스 플랫폼인 경우 현재 모드 표시 */}
+            <div
+              key={platform.id}
+              className="border rounded-lg shadow-sm p-3 bg-card"
+            >
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center">
+                  <h3 className="text-sm font-semibold text-card-foreground">
+                    {platform.name}
+                  </h3>
                   {platform.id === "wordpress" && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      ({wordpressFillScreen ? "꽉채움 모드" : "원본비율 모드"})
+                    <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-primary/10 text-primary rounded-sm">
+                      꽉채움
                     </span>
                   )}
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  {platform.width} × {platform.height}
-                </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    onClick={() => handleExportPlatform(platform.id)}
+                    disabled={
+                      isGenerating ||
+                      !(
+                        previews[platform.id] &&
+                        (typeof previews[platform.id] === "string" ||
+                          (typeof previews[platform.id] === "object" &&
+                            previews[platform.id].dataUrl))
+                      )
+                    }
+                  >
+                    내보내기
+                  </button>
+                </div>
               </div>
+
+              {/* 미리보기 컨테이너 */}
               <div
-                className="relative border overflow-hidden cursor-pointer rounded"
+                className="relative overflow-hidden cursor-pointer rounded-md"
                 style={{
                   aspectRatio: `${platform.width} / ${platform.height}`,
                   width: "100%",
                   maxWidth: "100%",
                   margin: "0 auto",
+                  backgroundColor:
+                    bgMode === "dark"
+                      ? "#121212"
+                      : bgMode === "transparent"
+                      ? "transparent"
+                      : "#FFFFFF",
+                  backgroundImage:
+                    bgMode === "transparent"
+                      ? "url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAOwgAADsIBFShKgAAAABh0RVh0U29mdHdhcmUAcGFpbnQubmV0IDQuMC45bDN+TgAAAEFJREFUOE9j+P//P0UYzmhpaXnPwMAwHz0uA2pg2dzcfB5kALohRGOgHqyhBDQApyhJGOgHLJeQhUFuJgtD/PADAKSXnAJxtJCbAAAAAElFTkSuQmCC')"
+                      : "none",
+                  backgroundRepeat: "repeat",
+                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+                  border: `1px solid ${
+                    bgMode === "transparent" ? "rgba(0,0,0,0.1)" : "transparent"
+                  }`,
                 }}
                 onClick={() => setActivePlatform(platform.id)}
               >
-                {/* 여기서 실제 미리보기 렌더링 */}
+                {/* 이미지 프리뷰 */}
                 {previews[platform.id] ? (
                   <div
-                    className={`w-full h-full flex justify-center items-center ${
-                      bgMode === "dark" ? "bg-gray-900" : "bg-white"
-                    }`}
+                    className="w-full h-full flex justify-center items-center"
                     style={{
                       width: "100%",
                       height: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      overflow: "hidden",
+                      position: "relative",
                     }}
                   >
                     <img
                       src={
-                        // 워드프레스 플랫폼의 경우 객체 구조로 저장되어 있음
                         typeof previews[platform.id] === "object" &&
                         previews[platform.id].dataUrl
                           ? previews[platform.id].dataUrl
@@ -1274,52 +1799,24 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                       }
                       alt={`Preview for ${platform.name}`}
                       className={`${
-                        // 워드프레스 플랫폼의 경우 자체 fitMode 사용, 그렇지 않으면 글로벌 fitMode 사용
-                        platform.id === "wordpress" &&
-                        typeof previews[platform.id] === "object" &&
-                        previews[platform.id].fitMode
-                          ? previews[platform.id].fitMode === "contain"
-                            ? "max-w-full max-h-full object-contain"
-                            : "w-full h-full object-cover"
-                          : fitMode === "contain"
-                          ? "max-w-full max-h-full object-contain"
-                          : "w-full h-full object-cover"
+                        // 워드프레스 또는 cover 모드인 경우 항상 꽉 채움
+                        platform.id === "wordpress" || fitMode === "cover"
+                          ? "w-full h-full object-cover"
+                          : "max-w-full max-h-full object-contain"
                       }`}
                       style={{
-                        maxWidth:
-                          (platform.id === "wordpress" &&
-                            typeof previews[platform.id] === "object" &&
-                            previews[platform.id].fitMode === "contain") ||
-                          (platform.id !== "wordpress" && fitMode === "contain")
-                            ? "98%"
-                            : "100%",
-                        maxHeight:
-                          (platform.id === "wordpress" &&
-                            typeof previews[platform.id] === "object" &&
-                            previews[platform.id].fitMode === "contain") ||
-                          (platform.id !== "wordpress" && fitMode === "contain")
-                            ? "98%"
-                            : "100%",
                         width:
-                          (platform.id === "wordpress" &&
-                            typeof previews[platform.id] === "object" &&
-                            previews[platform.id].fitMode === "cover") ||
-                          (platform.id !== "wordpress" && fitMode === "cover")
+                          platform.id === "wordpress" || fitMode === "cover"
                             ? "100%"
                             : "auto",
                         height:
-                          (platform.id === "wordpress" &&
-                            typeof previews[platform.id] === "object" &&
-                            previews[platform.id].fitMode === "cover") ||
-                          (platform.id !== "wordpress" && fitMode === "cover")
+                          platform.id === "wordpress" || fitMode === "cover"
                             ? "100%"
                             : "auto",
                         objectFit:
-                          platform.id === "wordpress" &&
-                          typeof previews[platform.id] === "object" &&
-                          previews[platform.id].fitMode
-                            ? previews[platform.id].fitMode
-                            : fitMode,
+                          platform.id === "wordpress" ? "cover" : fitMode,
+                        display: "block",
+                        objectPosition: "center",
                       }}
                     />
                   </div>
@@ -1336,24 +1833,11 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                       : "요소를 추가하여 미리보기를 생성하세요"}
                   </div>
                 )}
-              </div>
-              {/* 옵션으로 내보내기 버튼 추가 */}
-              <div className="flex justify-end mt-2">
-                <button
-                  className="text-xs px-2 py-1 rounded bg-muted hover:bg-muted/80"
-                  onClick={() => handleExportPlatform(platform.id)}
-                  disabled={
-                    isGenerating ||
-                    !(
-                      previews[platform.id] &&
-                      (typeof previews[platform.id] === "string" ||
-                        (typeof previews[platform.id] === "object" &&
-                          previews[platform.id].dataUrl))
-                    )
-                  }
-                >
-                  내보내기
-                </button>
+
+                {/* 플랫폼 사이즈 뱃지 */}
+                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded font-medium">
+                  {platform.width}×{platform.height}
+                </div>
               </div>
             </div>
           ))}
