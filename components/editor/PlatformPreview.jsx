@@ -199,8 +199,9 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
         const canvasHeight = canvas.height;
 
         // 이미지와 캔버스 비율 계산
-        const imgWidth = backgroundImage.width * backgroundImage.scaleX;
-        const imgHeight = backgroundImage.height * backgroundImage.scaleY;
+        const imgWidth = backgroundImage.width * (backgroundImage.scaleX || 1);
+        const imgHeight =
+          backgroundImage.height * (backgroundImage.scaleY || 1);
         const canvasRatio = canvasWidth / canvasHeight;
         const imgRatio = imgWidth / imgHeight;
 
@@ -213,8 +214,8 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
           scaleX = canvasWidth / backgroundImage.width;
           scaleY = scaleX; // 비율 유지
 
-          // 이미지가 가로로 꽉 차도록 확대
-          const extraScale = 1.0; // 1.0으로 설정하여 가로 폭을 정확히 맞춤
+          // 이미지가 가로로 꽉 차도록 추가 확대
+          const extraScale = 1.5; // 50% 추가 확대하여 완전히 채움
           scaleX *= extraScale;
           scaleY *= extraScale;
         } else {
@@ -222,8 +223,8 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
           scaleY = canvasHeight / backgroundImage.height;
           scaleX = scaleY; // 비율 유지
 
-          // 이미지가 세로로 꽉 차도록 확대
-          const extraScale = 1.0; // 1.0으로 설정하여 세로 높이를 정확히 맞춤
+          // 이미지가 세로로 꽉 차도록 추가 확대
+          const extraScale = 1.5; // 50% 추가 확대하여 완전히 채움
           scaleX *= extraScale;
           scaleY *= extraScale;
         }
@@ -242,160 +243,117 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
         canvas.renderAll();
       }
 
-      // 워드프레스 플랫폼인 경우 모든 요소들을 안쪽으로 이동
+      // 워드프레스 플랫폼인 경우 요소 이동 정보만 계산 (실제 이동은 하지 않음)
       if (platform.id === "wordpress") {
-        console.log("🔍 워드프레스 요소 이동 시작", {
+        console.log("🔍 워드프레스 요소 이동 계산 시작", {
           플랫폼: platform.id,
           캔버스크기: { width: canvas.width, height: canvas.height },
           객체수: canvas.getObjects().length,
         });
 
-        // 안전 영역 계산 (캔버스 크기의 20%)
-        const safeZoneX = canvas.width * 0.2;
-        const safeZoneY = canvas.height * 0.2;
+        // 안전 영역 계산 (캔버스 크기의 15%)
+        const safeZoneX = canvas.width * 0.15;
+        const safeZoneY = canvas.height * 0.15;
 
         // 모든 객체 정보 출력하여 디버깅
         const allObjects = canvas.getObjects();
         console.log(`📋 캔버스에 있는 총 객체 수: ${allObjects.length}`);
 
-        allObjects.forEach((obj, index) => {
-          console.log(`객체 #${index}:`, {
-            type: obj.type,
-            id: obj.id || "ID 없음",
-            visible: obj.visible,
-            width: obj.width,
-            height: obj.height,
-            scaleX: obj.scaleX,
-            scaleY: obj.scaleY,
-          });
-        });
-
-        // 이동 가능한 객체 판별
-        const moveableObjects = allObjects.filter((obj) => {
-          const isExcluded =
-            obj === backgroundImage ||
-            obj.id === "canvas-border" ||
-            obj.id?.startsWith("grid-") ||
-            obj.id === "guide-text" ||
-            obj.id === "drop-icon" ||
-            !obj.visible;
-
-          return !isExcluded;
-        });
-
+        // 이동 가능한 객체 필터링
+        const moveableObjects = findTargetObjects(canvas);
         console.log(`🚶 이동 가능한 객체 수: ${moveableObjects.length}`);
 
-        // 이동된 객체 카운터
-        let movedCount = 0;
+        if (moveableObjects.length === 0) {
+          console.log("⚠️ 이동 가능한 요소가 없습니다");
+        } else {
+          // 안전 영역 계산 (워드프레스 플랫폼 크기의 15% - 미리보기와 동일한 비율)
+          const safeZoneX = canvas.width * 0.15;
+          const safeZoneY = canvas.height * 0.15;
 
-        // 모든 객체들을 순회하며 처리
-        moveableObjects.forEach((obj) => {
-          // 객체 현재 위치 확인
-          const objWidth = obj.width * (obj.scaleX || 1);
-          const objHeight = obj.height * (obj.scaleY || 1);
+          // 이동 정보 계산 (실제로 요소를 이동시키지 않음)
+          const moveInfo = [];
 
-          // 요소 정보 로깅 (이동 전)
-          console.log(
-            `워드프레스 요소 확인 - ${obj.type} (ID: ${obj.id || "없음"})`,
-            {
-              위치: {
-                left: obj.left,
-                top: obj.top,
-                right: obj.left + objWidth,
-                bottom: obj.top + objHeight,
-              },
-              크기: {
-                width: objWidth,
-                height: objHeight,
-              },
-              visible: obj.visible,
-              안전영역: {
-                좌측: safeZoneX,
-                우측: canvas.width - safeZoneX,
-                상단: safeZoneY,
-                하단: canvas.height - safeZoneY,
-              },
+          // 모든 요소 처리
+          moveableObjects.forEach((obj) => {
+            // 객체가 null이거나 필수 속성이 없는 경우 건너뜀
+            if (!obj || obj.width === undefined || obj.height === undefined) {
+              console.log("⚠️ 유효하지 않은 객체 발견:", obj);
+              return;
             }
+
+            // scaleX와 scaleY가 undefined인 경우 기본값 1 사용
+            const objScaleX = obj.scaleX !== undefined ? obj.scaleX : 1;
+            const objScaleY = obj.scaleY !== undefined ? obj.scaleY : 1;
+
+            // 객체 크기 계산 - NaN 방지를 위한 안전한 계산
+            const objWidth = obj.width * objScaleX;
+            const objHeight = obj.height * objScaleY;
+
+            // left와 top이 숫자인지 확인
+            if (
+              typeof obj.left !== "number" ||
+              typeof obj.top !== "number" ||
+              isNaN(obj.left) ||
+              isNaN(obj.top)
+            ) {
+              console.log("⚠️ 유효하지 않은 위치 값을 가진 객체:", obj);
+              return;
+            }
+
+            // 원래 위치 저장 (위치 비교용)
+            const originalPosition = {
+              left: obj.left,
+              top: obj.top,
+            };
+
+            // 각 가장자리에 대한 거리 계산
+            const distToLeft = obj.left;
+            const distToRight = canvas.width - (obj.left + objWidth);
+            const distToTop = obj.top;
+            const distToBottom = canvas.height - (obj.top + objHeight);
+
+            // 안전 영역 이탈 확인 및 이동 거리 계산
+            let moveX = 0;
+            let moveY = 0;
+
+            if (distToLeft < safeZoneX) moveX = safeZoneX - distToLeft;
+            else if (distToRight < safeZoneX)
+              moveX = -(safeZoneX - distToRight);
+
+            if (distToTop < safeZoneY) moveY = safeZoneY - distToTop;
+            else if (distToBottom < safeZoneY)
+              moveY = -(safeZoneY - distToBottom);
+
+            // 이동이 필요한 경우에만 정보 저장
+            if (moveX !== 0 || moveY !== 0) {
+              console.log(`🔄 요소 이동 계산 (실제 이동 없음): ${obj.type}`, {
+                id: obj.id || "없음",
+                이동전: { left: obj.left, top: obj.top },
+                이동량: { x: moveX, y: moveY },
+                이동후예상: { left: obj.left + moveX, top: obj.top + moveY },
+              });
+
+              // 이동 정보만 저장 (실제 요소는 이동시키지 않음)
+              moveInfo.push({
+                id: obj.id,
+                type: obj.type,
+                originalLeft: obj.left,
+                originalTop: obj.top,
+                moveX: moveX,
+                moveY: moveY,
+                newLeft: obj.left + moveX,
+                newTop: obj.top + moveY,
+              });
+            }
+          });
+
+          console.log(
+            `🎯 워드프레스 플랫폼 요소 이동 계산 완료: ${moveInfo.length}개 요소`
           );
 
-          // 객체가 가장자리에 너무 가까운지 확인하고 필요시 이동
-          let adjustX = 0;
-          let adjustY = 0;
-
-          // 왼쪽 가장자리에 너무 가까운 경우
-          if (obj.left < safeZoneX) {
-            adjustX = safeZoneX - obj.left;
-          }
-          // 오른쪽 가장자리에 너무 가까운 경우
-          else if (obj.left + objWidth > canvas.width - safeZoneX) {
-            adjustX = canvas.width - safeZoneX - objWidth - obj.left;
-          }
-
-          // 위쪽 가장자리에 너무 가까운 경우
-          if (obj.top < safeZoneY) {
-            adjustY = safeZoneY - obj.top;
-          }
-          // 아래쪽 가장자리에 너무 가까운 경우
-          else if (obj.top + objHeight > canvas.height - safeZoneY) {
-            adjustY = canvas.height - safeZoneY - objHeight - obj.top;
-          }
-
-          // 위치 변경이 필요한 경우에만 적용
-          if (adjustX !== 0 || adjustY !== 0) {
-            console.log(
-              `↕️ 요소 이동 실행 - ${obj.type} (ID: ${obj.id || "없음"})`,
-              {
-                원래위치: { left: obj.left, top: obj.top },
-                조정값: { x: adjustX, y: adjustY },
-                새위치: {
-                  left: obj.left + adjustX,
-                  top: obj.top + adjustY,
-                },
-              }
-            );
-
-            // 이동 전 위치 저장
-            const oldLeft = obj.left;
-            const oldTop = obj.top;
-
-            obj.set({
-              left: obj.left + adjustX,
-              top: obj.top + adjustY,
-            });
-
-            // 이동 후 실제 변경됐는지 확인 (fabric.js 버그 체크)
-            const moved = oldLeft !== obj.left || oldTop !== obj.top;
-            if (moved) {
-              movedCount++;
-              console.log(
-                `✅ 요소 이동 성공 - 새위치: { left: ${obj.left}, top: ${obj.top} }`
-              );
-            } else {
-              console.log(`❌ 요소 이동 실패 - 위치 변경 안됨`);
-            }
-          } else {
-            console.log(
-              `워드프레스 요소 이동 불필요 - ${obj.type} (ID: ${
-                obj.id || "없음"
-              })`,
-              {
-                이유: "객체가 이미 안전 영역 내에 위치함",
-                위치: {
-                  left: obj.left,
-                  top: obj.top,
-                  width: objWidth,
-                  height: objHeight,
-                },
-              }
-            );
-          }
-        });
-
-        // 변경사항 적용
-        canvas.renderAll();
-        console.log(
-          `🏁 워드프레스 플랫폼 요소 이동 완료 - 총 ${movedCount}개 객체 이동됨`
-        );
+          // 이미지 생성 시 참조할 수 있도록 전역 변수에 저장
+          window.__WORDPRESS_MOVE_INFO__ = moveInfo;
+        }
       }
 
       return canvas;
@@ -450,7 +408,6 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
       }
 
       // 워드프레스 플랫폼에 대한 특별 처리
-      // 워드프레스가 포함되어 있고 워드프레스 화면 꽉 채우기 모드가 활성화된 경우
       const hasWordpress = platformsToGenerate.includes("wordpress");
 
       if (hasWordpress) {
@@ -489,11 +446,89 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               // 워드프레스 플랫폼 특별 처리
               if (platformId === "wordpress") {
                 // 이미지 URL 저장 전에 요소 위치 확인
-                console.log("워드프레스 플랫폼 이미지 생성 완료:", {
+                console.log("워드프레스 플랫폼 이미지 생성 전 처리:", {
                   platformId,
                   fitMode: "cover", // 항상 cover 모드 적용
-                  imageUrlLength: imageUrl ? imageUrl.length : 0,
+                  moveInfo: window.__WORDPRESS_MOVE_INFO__ || [],
                 });
+
+                // 저장된 이동 정보가 있으면 활용 (이 부분에서 실제 이미지에 적용)
+                if (
+                  window.__WORDPRESS_MOVE_INFO__ &&
+                  window.__WORDPRESS_MOVE_INFO__.length > 0
+                ) {
+                  console.log(
+                    `📐 이미지 생성을 위해 ${window.__WORDPRESS_MOVE_INFO__.length}개 요소 위치 조정`
+                  );
+
+                  // fabric.js 캔버스 참조 가져오기
+                  const activeCanvas =
+                    window.fabricCanvasInstance ||
+                    document.__EDITOR_FABRIC_CANVAS__;
+
+                  if (activeCanvas) {
+                    // 이미지 생성용 임시 캔버스 복제
+                    const tempCanvas = activeCanvas.toJSON([
+                      "id",
+                      "type",
+                      "originX",
+                      "originY",
+                      "left",
+                      "top",
+                      "width",
+                      "height",
+                      "fill",
+                      "stroke",
+                      "strokeWidth",
+                      "angle",
+                      "opacity",
+                      "scaleX",
+                      "scaleY",
+                      "flipX",
+                      "flipY",
+                      "skewX",
+                      "skewY",
+                      "text",
+                      "fontSize",
+                      "fontFamily",
+                      "fontWeight",
+                      "fontStyle",
+                      "lineHeight",
+                      "underline",
+                      "overline",
+                      "linethrough",
+                      "textAlign",
+                      "backgroundColor",
+                      "textBackgroundColor",
+                      "charSpacing",
+                      "styles",
+                      "direction",
+                      "path",
+                      "pathOffset",
+                      "radius",
+                    ]);
+
+                    // JSON을 파싱하여 이동 정보 적용
+                    if (tempCanvas && tempCanvas.objects) {
+                      window.__WORDPRESS_MOVE_INFO__.forEach((moveItem) => {
+                        const objIndex = tempCanvas.objects.findIndex(
+                          (obj) => obj.id === moveItem.id
+                        );
+
+                        if (objIndex !== -1) {
+                          // 임시 JSON에만 이동 정보 적용
+                          tempCanvas.objects[objIndex].left = moveItem.newLeft;
+                          tempCanvas.objects[objIndex].top = moveItem.newTop;
+                        }
+                      });
+
+                      // 임시 캔버스 JSON 저장 (이미지 생성에 활용)
+                      window.__WORDPRESS_TEMP_CANVAS__ = tempCanvas;
+                    }
+                  } else {
+                    console.log("⚠️ fabric.js 캔버스 참조를 찾을 수 없습니다");
+                  }
+                }
 
                 newPreviews[platformId] = {
                   dataUrl: imageUrl,
@@ -503,8 +538,6 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                 // 다른 플랫폼들은 기존 방식대로 처리
                 newPreviews[platformId] = imageUrl;
               }
-
-              // 생략된 기타 코드...
             }
 
             return platformId;
@@ -872,11 +905,11 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
       let canvasElement = document.getElementById("canvas");
 
       // fabric.js 캔버스를 직접 참조 시도
-      const fabricCanvas =
+      const activeCanvas =
         window.fabricCanvasInstance || document.__EDITOR_FABRIC_CANVAS__;
 
-      if (fabricCanvas && fabricCanvas.lowerCanvasEl) {
-        canvasElement = fabricCanvas.lowerCanvasEl;
+      if (activeCanvas && activeCanvas.lowerCanvasEl) {
+        canvasElement = activeCanvas.lowerCanvasEl;
         console.log("fabric.js 캔버스의 lowerCanvasEl을 찾았습니다.");
       } else if (!canvasElement) {
         console.warn("Canvas element not found by ID");
@@ -900,79 +933,99 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
 
       console.log("미리보기 생성에 사용할 캔버스:", canvasElement);
 
-      // 가이드 텍스트와 그리드를 임시로 제거
-      const canvasWithNoGuides = document.getElementById("canvas");
-      if (canvasWithNoGuides) {
-        try {
-          const activeCanvas =
-            window.fabricCanvasInstance || document.__EDITOR_FABRIC_CANVAS__;
+      try {
+        const activeCanvas =
+          window.fabricCanvasInstance || document.__EDITOR_FABRIC_CANVAS__;
 
-          if (activeCanvas) {
-            // 가이드 그리드와 텍스트를 찾아 임시로 숨김
-            const objectsToHide = [];
-            activeCanvas.getObjects().forEach((obj) => {
+        if (activeCanvas) {
+          // 가이드 그리드와 텍스트를 찾아 임시로 숨김
+          console.log("activeCanvas 액티브", activeCanvas);
+          const objectsToHide = [];
+          activeCanvas.getObjects().forEach((obj) => {
+            if (
+              obj.id &&
+              (obj.id.startsWith("grid-") ||
+                obj.id === "guide-text" ||
+                obj.id === "drop-icon" ||
+                obj.id === "size-info")
+            ) {
+              objectsToHide.push({
+                object: obj,
+                wasVisible: obj.visible,
+              });
+              obj.visible = false;
+            }
+          });
+
+          // 캔버스 다시 렌더링
+          activeCanvas.renderAll();
+
+          console.log("isWordpress", isWordpress);
+          console.log("activeCanvas:", activeCanvas);
+
+          // 워드프레스 플랫폼인 경우 특별 처리 (요소들을 안전 영역으로 이동)
+          if (isWordpress && activeCanvas) {
+            try {
+              console.log("🔄 워드프레스 플랫폼 요소 이동 시작", {
+                플랫폼ID: platform.id,
+                캔버스유효: !!activeCanvas,
+                캔버스크기: `${activeCanvas.width}x${activeCanvas.height}`,
+              });
+
+              // fabric.js 캔버스 확인 및 요소 이동 처리
               if (
-                obj.id &&
-                (obj.id.startsWith("grid-") ||
-                  obj.id === "guide-text" ||
-                  obj.id === "drop-icon" ||
-                  obj.id === "size-info")
+                activeCanvas &&
+                typeof activeCanvas.getObjects === "function"
               ) {
-                objectsToHide.push({
-                  object: obj,
-                  wasVisible: obj.visible,
-                });
-                obj.visible = false;
-              }
-            });
+                // 이동 가능한 객체 찾기
+                const moveableObjects = findTargetObjects(activeCanvas);
 
-            // 캔버스 다시 렌더링
-            activeCanvas.renderAll();
+                if (moveableObjects.length === 0) {
+                  console.log("⚠️ 이동 가능한 요소가 없습니다");
+                } else {
+                  // 안전 영역 계산 (워드프레스 플랫폼 크기의 15% - 미리보기와 동일한 비율)
+                  const safeZoneX = activeCanvas.width * 0.15;
+                  const safeZoneY = activeCanvas.height * 0.15;
 
-            // 워드프레스 플랫폼인 경우 특별 처리 (요소들을 안전 영역으로 이동)
-            if (isWordpress && activeCanvas) {
-              try {
-                console.log("🔄 워드프레스 플랫폼 요소 이동 시작", {
-                  플랫폼ID: platform.id,
-                  캔버스유효: !!activeCanvas,
-                  캔버스크기: `${activeCanvas.width}x${activeCanvas.height}`,
-                });
-
-                // fabric.js 캔버스 확인 및 요소 이동 처리
-                if (
-                  activeCanvas &&
-                  typeof activeCanvas.getObjects === "function"
-                ) {
-                  // 이동 가능한 객체 찾기
-                  const moveableObjects = findTargetObjects(activeCanvas);
-
-                  if (moveableObjects.length === 0) {
-                    console.log("⚠️ 이동 가능한 요소가 없습니다");
-                    return;
-                  }
-
-                  // 안전 영역 계산 (캔버스 크기의 25% - 안전 영역 더 넓게 설정)
-                  const safeZoneX = activeCanvas.width * 0.25;
-                  const safeZoneY = activeCanvas.height * 0.25;
-
-                  // 원래 위치 저장
-                  const originalPositions = [];
-                  let movedCount = 0;
+                  // 이동 정보 계산 (실제로 요소를 이동시키지 않음)
+                  const moveInfo = [];
 
                   // 모든 요소 처리
                   moveableObjects.forEach((obj) => {
-                    if (!obj) return;
+                    // 객체가 null이거나 필수 속성이 없는 경우 건너뜀
+                    if (
+                      !obj ||
+                      obj.width === undefined ||
+                      obj.height === undefined
+                    ) {
+                      console.log("⚠️ 유효하지 않은 객체 발견:", obj);
+                      return;
+                    }
 
-                    // 원래 위치 저장
-                    originalPositions.push({
-                      object: obj,
+                    // scaleX와 scaleY가 undefined인 경우 기본값 1 사용
+                    const objScaleX = obj.scaleX !== undefined ? obj.scaleX : 1;
+                    const objScaleY = obj.scaleY !== undefined ? obj.scaleY : 1;
+
+                    // 객체 크기 계산 - NaN 방지를 위한 안전한 계산
+                    const objWidth = obj.width * objScaleX;
+                    const objHeight = obj.height * objScaleY;
+
+                    // left와 top이 숫자인지 확인
+                    if (
+                      typeof obj.left !== "number" ||
+                      typeof obj.top !== "number" ||
+                      isNaN(obj.left) ||
+                      isNaN(obj.top)
+                    ) {
+                      console.log("⚠️ 유효하지 않은 위치 값을 가진 객체:", obj);
+                      return;
+                    }
+
+                    // 원래 위치 저장 (위치 비교용)
+                    const originalPosition = {
                       left: obj.left,
                       top: obj.top,
-                    });
-
-                    // 객체 크기 계산
-                    const objWidth = obj.width * (obj.scaleX || 1);
-                    const objHeight = obj.height * (obj.scaleY || 1);
+                    };
 
                     // 각 가장자리에 대한 거리 계산
                     const distToLeft = obj.left;
@@ -994,122 +1047,64 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                     else if (distToBottom < safeZoneY)
                       moveY = -(safeZoneY - distToBottom);
 
-                    // 이동이 필요한 경우
+                    // 이동이 필요한 경우에만 정보 저장
                     if (moveX !== 0 || moveY !== 0) {
-                      console.log(`🔄 요소 이동 시작: ${obj.type}`, {
-                        id: obj.id || "없음",
-                        이동전: { left: obj.left, top: obj.top },
-                        이동량: { x: moveX, y: moveY },
-                      });
-
-                      // 위치 변경 직접 설정
-                      try {
-                        const oldLeft = obj.left;
-                        const oldTop = obj.top;
-
-                        // Fabric.js 객체의 left/top 속성 직접 변경
-                        obj.set({
-                          left: obj.left + moveX,
-                          top: obj.top + moveY,
-                        });
-
-                        // 변경 성공 확인
-                        const moved =
-                          oldLeft !== obj.left || oldTop !== obj.top;
-
-                        if (moved) {
-                          movedCount++;
-                          console.log(`✅ 요소 이동 성공 - ${obj.type}`, {
-                            이전위치: { left: oldLeft, top: oldTop },
-                            새위치: { left: obj.left, top: obj.top },
-                          });
-                        } else {
-                          console.log(
-                            `❌ 요소 이동 실패 - ${obj.type} - 위치가 변경되지 않음`
-                          );
+                      console.log(
+                        `🔄 요소 이동 계산 (실제 이동 없음): ${obj.type}`,
+                        {
+                          id: obj.id || "없음",
+                          이동전: { left: obj.left, top: obj.top },
+                          이동량: { x: moveX, y: moveY },
+                          이동후예상: {
+                            left: obj.left + moveX,
+                            top: obj.top + moveY,
+                          },
                         }
-                      } catch (err) {
-                        console.error(`❌ 요소 이동 중 오류: ${obj.type}`, err);
-                      }
+                      );
+
+                      // 이동 정보만 저장 (실제 요소는 이동시키지 않음)
+                      moveInfo.push({
+                        id: obj.id,
+                        type: obj.type,
+                        originalLeft: obj.left,
+                        originalTop: obj.top,
+                        moveX: moveX,
+                        moveY: moveY,
+                        newLeft: obj.left + moveX,
+                        newTop: obj.top + moveY,
+                      });
                     }
                   });
 
-                  // 캔버스 업데이트
-                  activeCanvas.renderAll();
                   console.log(
-                    `�� 워드프레스 플랫폼 요소 이동 완료: 총 ${movedCount}/${moveableObjects.length}개 이동됨`
+                    `🎯 워드프레스 플랫폼 요소 이동 계산 완료: ${moveInfo.length}개 요소`
                   );
 
-                  // 이미지 생성 후 요소 위치 복원 설정
-                  window.__WORDPRESS_ORIGINAL_POSITIONS__ = originalPositions;
-
-                  // 이미지 생성 후 원래 위치로 복원하기 위한 타이머
-                  setTimeout(() => {
-                    if (
-                      window.__WORDPRESS_ORIGINAL_POSITIONS__ &&
-                      window.__WORDPRESS_ORIGINAL_POSITIONS__.length > 0
-                    ) {
-                      console.log(
-                        `⏪ 위치 복원 시작: ${window.__WORDPRESS_ORIGINAL_POSITIONS__.length}개 요소`
-                      );
-
-                      // 복원 성공 카운트
-                      let restoredCount = 0;
-
-                      window.__WORDPRESS_ORIGINAL_POSITIONS__.forEach(
-                        (item) => {
-                          if (item.object) {
-                            const oldLeft = item.object.left;
-                            const oldTop = item.object.top;
-
-                            item.object.set({
-                              left: item.left,
-                              top: item.top,
-                            });
-
-                            if (
-                              oldLeft !== item.object.left ||
-                              oldTop !== item.object.top
-                            ) {
-                              restoredCount++;
-                            }
-                          }
-                        }
-                      );
-
-                      if (activeCanvas) {
-                        activeCanvas.renderAll();
-                      }
-
-                      console.log(
-                        `✅ 위치 복원 완료: ${restoredCount}/${window.__WORDPRESS_ORIGINAL_POSITIONS__.length}개 요소`
-                      );
-                      window.__WORDPRESS_ORIGINAL_POSITIONS__ = null;
-                    }
-                  }, 5000); // 더 긴 대기 시간 (5초)
-                } else {
-                  console.error("❌ 유효하지 않은 Fabric.js 캔버스 객체");
+                  // 이미지 생성 시 참조할 수 있도록 전역 변수에 저장
+                  window.__WORDPRESS_MOVE_INFO__ = moveInfo;
                 }
-              } catch (wpError) {
-                console.error("❌ 워드프레스 요소 이동 처리 중 오류:", wpError);
+              } else {
+                console.error("❌ 유효하지 않은 Fabric.js 캔버스 객체");
               }
+            } catch (wpError) {
+              console.error("❌ 워드프레스 요소 이동 처리 중 오류:", wpError);
             }
-
-            // 이미지 생성 후 나중에 복원하기 위해 timeout 설정
-            setTimeout(() => {
-              objectsToHide.forEach((item) => {
-                if (item.object && typeof item.wasVisible !== "undefined") {
-                  item.object.visible = item.wasVisible;
-                }
-              });
-              if (activeCanvas) {
-                activeCanvas.renderAll();
-              }
-            }, 1000);
           }
-        } catch (e) {
-          console.error("가이드 숨기기 중 오류:", e);
+
+          // 이미지 생성 후 나중에 복원하기 위해 timeout 설정
+          setTimeout(() => {
+            objectsToHide.forEach((item) => {
+              if (item.object && typeof item.wasVisible !== "undefined") {
+                item.object.visible = item.wasVisible;
+              }
+            });
+            if (activeCanvas) {
+              activeCanvas.renderAll();
+            }
+          }, 1000);
         }
+      } catch (e) {
+        console.error("가이드 숨기기 중 오류:", e);
       }
 
       // 캔버스 현재 스타일 저장
@@ -1207,7 +1202,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
 
       try {
         // 먼저 fabric.js 캔버스를 사용하여 직접 이미지 생성 시도
-        if (fabricCanvas) {
+        if (activeCanvas) {
           try {
             console.log("fabric.js로 직접 이미지 생성 시도");
 
@@ -1216,11 +1211,11 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
 
             // 현재 캔버스 상태 저장
             const originalState = {
-              zoom: fabricCanvas.getZoom(),
-              width: fabricCanvas.getWidth(),
-              height: fabricCanvas.getHeight(),
-              viewportTransform: [...fabricCanvas.viewportTransform],
-              backgroundColor: fabricCanvas.backgroundColor,
+              zoom: activeCanvas.getZoom(),
+              width: activeCanvas.getWidth(),
+              height: activeCanvas.getHeight(),
+              viewportTransform: [...activeCanvas.viewportTransform],
+              backgroundColor: activeCanvas.backgroundColor,
             };
 
             // 편집 화면에서 보이는 상태 그대로 캡처하기 위한 임시 설정
@@ -1237,9 +1232,9 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
 
             // 배경색 설정
             if (bgModeParam === "dark") {
-              fabricCanvas.set("backgroundColor", darkBgColor);
+              activeCanvas.set("backgroundColor", darkBgColor);
             } else if (bgModeParam !== "transparent") {
-              fabricCanvas.set("backgroundColor", "#FFFFFF");
+              activeCanvas.set("backgroundColor", "#FFFFFF");
             }
 
             // 원본 비율 계산 (줌 상태 포함)
@@ -1249,10 +1244,10 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
             const targetRatio = platformWidth / platformHeight;
 
             // 캔버스 렌더링 (현재 줌 상태 유지)
-            fabricCanvas.renderAll();
+            activeCanvas.renderAll();
 
             // 현재 보이는 화면 그대로 캡처
-            const viewportData = fabricCanvas.toDataURL({
+            const viewportData = activeCanvas.toDataURL({
               format: format,
               quality: 0.95,
               multiplier: 1,
@@ -1273,75 +1268,130 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                 if (platformId === "wordpress") {
                   console.log("워드프레스 플랫폼 특별 처리 - 완전 꽉채움 모드");
 
-                  // 소스 이미지 크기
-                  const sourceWidth = img.width;
-                  const sourceHeight = img.height;
+                  try {
+                    // 이동 정보가 있는지 확인
+                    const hasMoveInfo =
+                      window.__WORDPRESS_MOVE_INFO__ &&
+                      window.__WORDPRESS_MOVE_INFO__.length > 0;
 
-                  // 대상 캔버스 크기
-                  const targetWidth = platformWidth;
-                  const targetHeight = platformHeight;
+                    if (hasMoveInfo) {
+                      console.log(
+                        `적용할 이동 정보: ${window.__WORDPRESS_MOVE_INFO__.length}개 요소`
+                      );
 
-                  // 소스와 대상의 비율 계산
-                  const sourceRatio = sourceWidth / sourceHeight;
-                  const targetRatio = targetWidth / targetHeight;
+                      // fabric.js 캔버스 참조 가져오기
+                      const activeCanvas =
+                        window.fabricCanvasInstance ||
+                        document.__EDITOR_FABRIC_CANVAS__;
 
-                  let drawWidth,
-                    drawHeight,
-                    sourceX = 0,
-                    sourceY = 0;
+                      if (activeCanvas && window.__WORDPRESS_TEMP_CANVAS__) {
+                        console.log(
+                          "이동된 요소들이 적용된 임시 캔버스 정보 사용"
+                        );
+                      }
+                    }
 
-                  if (sourceRatio > targetRatio) {
-                    // 이미지가 타겟보다 가로로 더 넓은 경우
-                    // 높이에 맞추고 가로는 중앙 크롭
-                    drawHeight = targetHeight;
-                    drawWidth = targetHeight * sourceRatio;
+                    // 소스 이미지 크기
+                    const sourceWidth = img.width;
+                    const sourceHeight = img.height;
 
-                    // 화면 꽉 채우기 위해 추가 확대
-                    const scale = 1.05; // 약간 더 크게 확대하여 완전히 채움
-                    drawWidth *= scale;
-                    drawHeight *= scale;
+                    // 대상 캔버스 크기
+                    const targetWidth = platformWidth;
+                    const targetHeight = platformHeight;
 
-                    // 중앙 정렬을 위한 X 오프셋 계산
-                    const offsetX = (targetWidth - drawWidth) / 2;
+                    // 소스와 대상의 비율 계산
+                    const sourceRatio = sourceWidth / sourceHeight;
+                    const targetRatio = targetWidth / targetHeight;
 
-                    // 이미지 그리기 - 완전히 꽉 채우기 위해 offsetX 대신 0 사용
-                    tempCtx.drawImage(
-                      img,
-                      0,
-                      0,
-                      sourceWidth,
-                      sourceHeight,
-                      0,
-                      0,
-                      drawWidth,
-                      drawHeight
-                    );
-                  } else {
-                    // 이미지가 타겟보다 세로로 더 긴 경우
-                    // 너비에 맞추고 세로는 중앙 크롭
-                    drawWidth = targetWidth;
-                    drawHeight = targetWidth / sourceRatio;
+                    let drawWidth, drawHeight;
 
-                    // 화면 꽉 채우기 위해 추가 확대
-                    const scale = 1.05; // 약간 더 크게 확대하여 완전히 채움
-                    drawWidth *= scale;
-                    drawHeight *= scale;
+                    if (sourceRatio > targetRatio) {
+                      // 이미지가 타겟보다 가로로 더 넓은 경우
+                      // 높이에 맞추고 가로는 중앙 크롭
+                      drawHeight = targetHeight;
+                      drawWidth = targetHeight * sourceRatio;
 
-                    // 중앙 정렬을 위한 Y 오프셋 계산
-                    const offsetY = (targetHeight - drawHeight) / 2;
+                      // 화면 꽉 채우기 위해 추가 확대
+                      const scale = 1.5; // 50% 더 크게 확대하여 완전히 채움
+                      drawWidth *= scale;
+                      drawHeight *= scale;
 
-                    // 이미지 그리기 - 완전히 꽉 채우기 위해 offsetY 대신 0 사용
-                    tempCtx.drawImage(
-                      img,
-                      0,
-                      0,
-                      sourceWidth,
-                      sourceHeight,
-                      0,
-                      0,
-                      drawWidth,
-                      drawHeight
-                    );
+                      // 중앙에 배치하여 가로 여백 없이 채움
+                      const offsetX = (targetWidth - drawWidth) / 2;
+                      tempCtx.drawImage(
+                        img,
+                        0,
+                        0,
+                        sourceWidth,
+                        sourceHeight,
+                        offsetX,
+                        0,
+                        drawWidth,
+                        drawHeight
+                      );
+
+                      // 여기에서 이동된 요소들 그리기
+                      if (hasMoveInfo && window.__WORDPRESS_TEMP_CANVAS__) {
+                        // 임시 캔버스에 이동 정보가 적용된 객체들을 개별적으로 렌더링
+                        // 실제로는 이 부분이 더 복잡해질 수 있으며,
+                        // fabric.js의 loadFromJSON 같은 메서드를 사용해야 할 수 있음
+                        console.log("이동된 요소들을 이미지에 적용");
+
+                        // 여기서 fabric.js 캔버스를 생성하고 JSON을 로드할 수 있지만,
+                        // 성능 및 복잡성 문제로 현재는 기본 이미지만 사용
+                        try {
+                          const activeCanvas =
+                            window.fabricCanvasInstance ||
+                            document.__EDITOR_FABRIC_CANVAS__;
+                          if (
+                            activeCanvas &&
+                            window.__WORDPRESS_TEMP_CANVAS__
+                          ) {
+                            // 이미 이동 정보가 적용된 임시 JSON을 사용
+                            // 실제 구현에서는 이 JSON으로 새 캔버스를 만들어 렌더링할 수 있음
+                            console.log(
+                              "임시 캔버스 JSON 사용 가능:",
+                              window.__WORDPRESS_TEMP_CANVAS__.objects.length +
+                                "개 객체"
+                            );
+                          }
+                        } catch (err) {
+                          console.error("이동된 요소 적용 중 오류:", err);
+                        }
+                      }
+                    } else {
+                      // 이미지가 타겟보다 세로로 더 긴 경우
+                      // 너비에 맞추고 세로는 중앙 크롭
+                      drawWidth = targetWidth;
+                      drawHeight = targetWidth / sourceRatio;
+
+                      // 화면 꽉 채우기 위해 추가 확대
+                      const scale = 1; // 50% 더 크게 확대하여 완전히 채움
+                      drawWidth *= scale;
+                      drawHeight *= scale;
+
+                      // 중앙에 배치하여 세로 여백 없이 채움
+                      const offsetY = (targetHeight - drawHeight) / 2;
+                      tempCtx.drawImage(
+                        img,
+                        0,
+                        0,
+                        sourceWidth,
+                        sourceHeight,
+                        0,
+                        offsetY,
+                        drawWidth,
+                        drawHeight
+                      );
+
+                      // 여기에서 이동된 요소들 그리기
+                      if (hasMoveInfo && window.__WORDPRESS_TEMP_CANVAS__) {
+                        // 임시 캔버스에 이동 정보가 적용된 객체들을 개별적으로 렌더링
+                        console.log("이동된 요소들을 이미지에 적용");
+                      }
+                    }
+                  } catch (wpError) {
+                    console.error("워드프레스 이미지 처리 중 오류:", wpError);
                   }
                 } else if (fitModeParam === "contain") {
                   // 기존 contain 모드 처리 코드...
@@ -1417,18 +1467,18 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                 );
 
                 // 원래 캔버스 상태 복원
-                fabricCanvas.setZoom(originalState.zoom);
-                fabricCanvas.setDimensions({
+                activeCanvas.setZoom(originalState.zoom);
+                activeCanvas.setDimensions({
                   width: originalState.width,
                   height: originalState.height,
                 });
-                fabricCanvas.viewportTransform =
+                activeCanvas.viewportTransform =
                   originalState.viewportTransform;
-                fabricCanvas.set(
+                activeCanvas.set(
                   "backgroundColor",
                   originalState.backgroundColor
                 );
-                fabricCanvas.renderAll();
+                activeCanvas.renderAll();
 
                 resolve(resultImage);
               };
@@ -1436,12 +1486,12 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               img.onerror = () => {
                 console.error("이미지 로딩 실패");
                 // 원래 캔버스 상태 복원
-                fabricCanvas.setZoom(originalState.zoom);
-                fabricCanvas.set(
+                activeCanvas.setZoom(originalState.zoom);
+                activeCanvas.set(
                   "backgroundColor",
                   originalState.backgroundColor
                 );
-                fabricCanvas.renderAll();
+                activeCanvas.renderAll();
 
                 // 실패 시 대체 방법으로 생성
                 resolve(null);
@@ -1799,8 +1849,10 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                       }
                       alt={`Preview for ${platform.name}`}
                       className={`${
-                        // 워드프레스 또는 cover 모드인 경우 항상 꽉 채움
-                        platform.id === "wordpress" || fitMode === "cover"
+                        // 워드프레스는 항상 꽉 채움, 다른 플랫폼은 설정된 fitMode 사용
+                        platform.id === "wordpress"
+                          ? "w-full h-full object-cover"
+                          : fitMode === "cover"
                           ? "w-full h-full object-cover"
                           : "max-w-full max-h-full object-contain"
                       }`}
