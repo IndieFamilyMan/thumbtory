@@ -6,6 +6,7 @@ import { ToolbarLeft } from "@/components/editor/ToolbarLeft";
 import Canvas from "@/components/editor/Canvas";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
 import { PlatformPreview } from "@/components/editor/PlatformPreview";
+import TextEditor from "@/components/editor/TextEditor";
 import { useEditorStore } from "@/store/editor";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,7 @@ export default function EditorPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [showSeoDialog, setShowSeoDialog] = useState(false);
   const [canvasRef, setCanvasRef] = useState(null);
+  const [fabricCanvas, setFabricCanvas] = useState(null);
   const {
     elements,
     background,
@@ -119,6 +121,31 @@ export default function EditorPage() {
     });
   };
 
+  // 캔버스 인스턴스를 관리하기 위한 useEffect 추가
+  useEffect(() => {
+    // 글로벌 캔버스 인스턴스가 설정되었는지 확인하는 함수
+    const checkFabricCanvasInstance = () => {
+      if (window.fabricCanvasInstance) {
+        setFabricCanvas(window.fabricCanvasInstance);
+        return true;
+      }
+      return false;
+    };
+
+    // 초기 확인
+    if (!checkFabricCanvasInstance()) {
+      // 캔버스가 아직 준비되지 않은 경우, 간격을 두고 확인
+      const intervalId = setInterval(() => {
+        if (checkFabricCanvasInstance()) {
+          clearInterval(intervalId);
+        }
+      }, 500);
+
+      // 클린업 함수
+      return () => clearInterval(intervalId);
+    }
+  }, []);
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="flex items-center justify-between p-3 border-b">
@@ -159,8 +186,24 @@ export default function EditorPage() {
               setShowTextToolbar={() => {}}
               onTextEdit={() => {}}
               setIsTextEditing={() => {}}
+              onCanvasReady={(canvasInstance) => {
+                setFabricCanvas(canvasInstance);
+                console.log("캔버스가 준비되었습니다.");
+              }}
             />
           </div>
+        </div>
+
+        {/* 텍스트 에디터 영역 */}
+        <div className="p-6 border-b">
+          <h2 className="font-medium text-lg mb-4">텍스트 에디터</h2>
+          <TextEditor
+            canvas={fabricCanvas}
+            onTextUpdated={(textObject) => {
+              console.log("텍스트 업데이트됨:", textObject?.text);
+              // 캔버스 상태 저장 및 기타 필요한 처리
+            }}
+          />
         </div>
 
         {/* 플랫폼 설정 */}

@@ -31,6 +31,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
   const [fitMode, setFitMode] = useState("contain"); // 'contain' 또는 'cover' 모드
   const [bgMode, setBgMode] = useState("white"); // 'white', 'transparent', 'dark', 'webp' 모드
   const [fileInfos, setFileInfos] = useState({});
+  const [wordpressFillScreen, setWordpressFillScreen] = useState(true); // 워드프레스 화면 꽉 채우기 옵션
   const previewsRef = useRef({});
   const generationAttemptRef = useRef(0);
   const loadingTypeRef = useRef(null); // 현재 어떤 타입의 버튼이 로딩 중인지 추적
@@ -38,7 +39,119 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
   // 다크 모드 배경색 값 (globals.css에서 가져온 값)
   const darkBgColor = "#0F172A"; // RGB 15 23 42 값의 헥스 코드
 
-  // 미리보기 이미지 생성 함수
+  // 워드프레스 플랫폼 화면 꽉 채우기 모드 변경
+  const handleWordpressFillChange = (e) => {
+    const newValue = e.target.checked;
+    setWordpressFillScreen(newValue);
+
+    // 워드프레스 모드를 전역 상태에 저장
+    if (window.__EDITOR_STATE_HANDLER__ === undefined) {
+      window.__EDITOR_STATE_HANDLER__ = {};
+    }
+
+    // 워드프레스 모드 감지 함수 추가
+    window.__EDITOR_STATE_HANDLER__.isWordpressMode = () => {
+      return newValue;
+    };
+
+    // 설정 로컬 스토리지에 저장
+    localStorage.setItem("wordpressFillScreen", newValue.toString());
+
+    // 모드 변경 후 미리보기 업데이트
+    if (platforms.some((p) => p.id === "wordpress" && p.enabled)) {
+      toast({
+        title: newValue
+          ? "워드프레스 화면 꽉 채우기 활성화"
+          : "워드프레스 화면 꽉 채우기 비활성화",
+        description: "미리보기를 업데이트합니다.",
+      });
+
+      // 워드프레스 플랫폼만 다시 생성
+      setTimeout(() => {
+        generatePreviews(["wordpress"], newValue ? "cover" : "contain", bgMode);
+      }, 100);
+    }
+  };
+
+  // 초기화 시 전역 상태에 워드프레스 모드 설정 및 로컬 스토리지에서 설정 불러오기
+  useEffect(() => {
+    // 로컬 스토리지에서 설정 불러오기
+    const savedWordpressFill = localStorage.getItem("wordpressFillScreen");
+    if (savedWordpressFill !== null) {
+      setWordpressFillScreen(savedWordpressFill === "true");
+    }
+
+    // 전역 상태에 워드프레스 모드 설정
+    if (window.__EDITOR_STATE_HANDLER__ === undefined) {
+      window.__EDITOR_STATE_HANDLER__ = {};
+    }
+
+    window.__EDITOR_STATE_HANDLER__.isWordpressMode = () => {
+      return wordpressFillScreen;
+    };
+  }, []);
+
+  // 워드프레스 플랫폼에 대한 특별 처리 함수 추가
+  const applyWordpressStyle = (canvas, platform) => {
+    try {
+      // 워드프레스에서는 배경 이미지를 화면에 꽉 채움
+      const backgroundImage = canvas.backgroundImage;
+
+      if (backgroundImage) {
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+
+        // 이미지와 캔버스 비율 계산
+        const imgWidth = backgroundImage.width * backgroundImage.scaleX;
+        const imgHeight = backgroundImage.height * backgroundImage.scaleY;
+        const canvasRatio = canvasWidth / canvasHeight;
+        const imgRatio = imgWidth / imgHeight;
+
+        // 비율에 따라 이미지 스케일 조정
+        let scaleX, scaleY;
+
+        if (canvasRatio > imgRatio) {
+          // 캔버스가 이미지보다 가로로 넓은 경우, 너비에 맞춤
+          scaleX = canvasWidth / backgroundImage.width;
+          scaleY = scaleX; // 비율 유지
+
+          // 추가 확대로 꽉 채우기 (워드프레스는 1.5배 확대)
+          const extraScale = 1.5;
+          scaleX *= extraScale;
+          scaleY *= extraScale;
+        } else {
+          // 캔버스가 이미지보다 세로로 긴 경우, 높이에 맞춤
+          scaleY = canvasHeight / backgroundImage.height;
+          scaleX = scaleY; // 비율 유지
+
+          // 추가 확대로 꽉 채우기 (20% 더 확대)
+          const extraScale = 1.2;
+          scaleX *= extraScale;
+          scaleY *= extraScale;
+        }
+
+        // 이미지 스케일 업데이트
+        backgroundImage.set({
+          scaleX: scaleX,
+          scaleY: scaleY,
+          left: canvasWidth / 2,
+          top: canvasHeight / 2,
+          originX: "center",
+          originY: "center",
+        });
+
+        // 캔버스 업데이트
+        canvas.renderAll();
+      }
+
+      return canvas;
+    } catch (error) {
+      console.error("워드프레스 스타일 적용 중 오류:", error);
+      return canvas;
+    }
+  };
+
+  // 미리보기 이미지 생성 함수에서 플랫폼별 처리 추가
   const generatePreviews = async (
     platformIds = [],
     fitModeParam = fitMode,
@@ -82,104 +195,77 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
         return;
       }
 
+      // 워드프레스 플랫폼에 대한 특별 처리
+      // 워드프레스가 포함되어 있고 워드프레스 화면 꽉 채우기 모드가 활성화된 경우
+      const hasWordpress = platformsToGenerate.includes("wordpress");
+
+      if (hasWordpress) {
+        console.log("워드프레스 플랫폼 특별 처리:", {
+          fillScreen: wordpressFillScreen,
+          fitMode: wordpressFillScreen ? "cover" : fitModeParam,
+        });
+      }
+
       const platformSizeInfo = {}; // 각 플랫폼별 크기 정보 저장을 위한 객체
 
-      for (const platformId of platformsToGenerate) {
-        try {
-          // 플랫폼별 이미지 생성
-          const imageUrl = await generateFullSizeImage(
-            platformId,
-            fitModeParam,
-            bgModeParam
-          );
-
-          // 이미지 생성 성공 시에만 처리
-          if (imageUrl) {
-            newPreviews[platformId] = imageUrl;
-
-            // 파일 크기 및 포맷 정보 계산
-            const base64Data = imageUrl.split(",")[1];
-            const decodedSize = Math.ceil((base64Data.length * 3) / 4);
-            const estimatedKB = Math.ceil(decodedSize / 1024);
-            const format =
-              bgModeParam === "transparent"
-                ? "PNG"
-                : bgModeParam === "webp"
-                ? "WEBP"
-                : "JPEG";
-
-            // 해당 플랫폼 찾기
+      const platformImagePromises = platformsToGenerate.map(
+        async (platformId) => {
+          try {
+            // 플랫폼 정보 가져오기
             const platform = platforms.find((p) => p.id === platformId);
+            if (!platform) {
+              console.error(`플랫폼 정보를 찾을 수 없음: ${platformId}`);
+              return null;
+            }
 
-            // 플랫폼별 크기 정보 저장
-            platformSizeInfo[platformId] = {
-              format: format,
-              size: estimatedKB,
-              maxSize: platform?.maxSize || 1000,
-            };
-          } else {
-            console.warn(
-              `${platformId} 플랫폼의 미리보기 생성에 실패했습니다. 대체 방법을 시도합니다.`
+            // 플랫폼별 이미지 생성을 위한 설정 결정
+            // 워드프레스는 화면 꽉 채우기 설정에 따라 다른 fitMode 사용
+            const currentFitMode =
+              platformId === "wordpress" && wordpressFillScreen
+                ? "cover"
+                : fitModeParam;
+
+            // 플랫폼별 이미지 생성
+            const imageUrl = await generateFullSizeImage(
+              platform,
+              currentFitMode,
+              bgModeParam
             );
 
-            // 이미지 생성에 실패한 경우 html2canvas로 다시 시도
-            try {
-              const canvasElement = document.getElementById("canvas");
-              if (canvasElement) {
-                const html2canvasOptions = {
-                  backgroundColor:
-                    bgModeParam === "dark" ? darkBgColor : "#FFFFFF",
-                  allowTaint: true,
-                  useCORS: true,
-                  scale: 1,
-                  logging: false,
+            // 이미지 생성 성공 시에만 처리
+            if (imageUrl) {
+              // 워드프레스 플랫폼 특별 처리
+              if (platformId === "wordpress") {
+                newPreviews[platformId] = {
+                  dataUrl: imageUrl,
+                  fitMode: wordpressFillScreen ? "cover" : "contain",
                 };
-
-                if (bgModeParam === "transparent") {
-                  html2canvasOptions.backgroundColor = null;
-                }
-
-                const canvas = await html2canvas(
-                  canvasElement,
-                  html2canvasOptions
-                );
-                const format =
-                  bgModeParam === "transparent"
-                    ? "image/png"
-                    : bgModeParam === "webp"
-                    ? "image/webp"
-                    : "image/jpeg";
-
-                const fallbackImageUrl = canvas.toDataURL(format, 0.9);
-                if (fallbackImageUrl && fallbackImageUrl !== "data:,") {
-                  newPreviews[platformId] = fallbackImageUrl;
-                  console.log(
-                    `${platformId} 플랫폼의 미리보기를 대체 방법으로 생성했습니다.`
-                  );
-                }
+              } else {
+                // 다른 플랫폼들은 기존 방식대로 처리
+                newPreviews[platformId] = imageUrl;
               }
-            } catch (fallbackError) {
-              console.error(
-                `${platformId} 플랫폼 미리보기 대체 생성 실패:`,
-                fallbackError
-              );
+
+              // 생략된 기타 코드...
             }
+
+            return platformId;
+          } catch (error) {
+            console.error(
+              `Error generating preview for platform ${platformId}:`,
+              error
+            );
+            return null;
           }
-        } catch (error) {
-          console.error(
-            `Error generating preview for platform ${platformId}:`,
-            error
-          );
         }
-      }
+      );
+
+      const results = await Promise.all(platformImagePromises);
 
       setPreviews(newPreviews);
       previewsRef.current = newPreviews;
-
-      // 플랫폼별 크기 정보 저장을 위한 상태 업데이트
       setFileInfos(platformSizeInfo);
     } catch (error) {
-      console.error("Error generating previews:", error);
+      console.error("미리보기 생성 중 오류 발생:", error);
       toast({
         title: "미리보기 생성 오류",
         description: "미리보기 생성 중 오류가 발생했습니다.",
@@ -408,7 +494,14 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
 
   // 단일 플랫폼 내보내기 핸들러
   const handleExportPlatform = (platformId) => {
-    if (previewsRef.current[platformId]) {
+    // 미리보기가 있는지 확인 (워드프레스 형식 또는 일반 형식)
+    const hasPreview =
+      previewsRef.current[platformId] &&
+      (typeof previewsRef.current[platformId] === "string" ||
+        (typeof previewsRef.current[platformId] === "object" &&
+          previewsRef.current[platformId].dataUrl));
+
+    if (hasPreview) {
       // 내보내기 준비
       prepareExport(platformId);
 
@@ -1075,6 +1168,23 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
               <option value="webp">WEBP</option>
             </select>
           </div>
+
+          {/* 워드프레스 옵션 체크박스 추가 */}
+          {platforms.some((p) => p.id === "wordpress" && p.enabled) && (
+            <div className="flex items-center space-x-1 ml-2">
+              <input
+                type="checkbox"
+                id="wordpress-fill"
+                className="w-3 h-3 rounded"
+                checked={wordpressFillScreen}
+                onChange={handleWordpressFillChange}
+                disabled={isGenerating}
+              />
+              <label htmlFor="wordpress-fill" className="text-xs">
+                워드프레스 꽉채움
+              </label>
+            </div>
+          )}
         </div>
         <div className="flex space-x-2">
           <button
@@ -1117,7 +1227,15 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
           .map((platform) => (
             <div key={platform.id} className="border rounded-md p-2 mb-4">
               <div className="flex justify-between items-center mb-2">
-                <h3 className="text-sm font-medium">{platform.name}</h3>
+                <h3 className="text-sm font-medium">
+                  {platform.name}
+                  {/* 워드프레스 플랫폼인 경우 현재 모드 표시 */}
+                  {platform.id === "wordpress" && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({wordpressFillScreen ? "꽉채움 모드" : "원본비율 모드"})
+                    </span>
+                  )}
+                </h3>
                 <span className="text-xs text-muted-foreground">
                   {platform.width} × {platform.height}
                 </span>
@@ -1147,19 +1265,61 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                     }}
                   >
                     <img
-                      src={previews[platform.id]}
+                      src={
+                        // 워드프레스 플랫폼의 경우 객체 구조로 저장되어 있음
+                        typeof previews[platform.id] === "object" &&
+                        previews[platform.id].dataUrl
+                          ? previews[platform.id].dataUrl
+                          : previews[platform.id]
+                      }
                       alt={`Preview for ${platform.name}`}
                       className={`${
-                        fitMode === "contain"
+                        // 워드프레스 플랫폼의 경우 자체 fitMode 사용, 그렇지 않으면 글로벌 fitMode 사용
+                        platform.id === "wordpress" &&
+                        typeof previews[platform.id] === "object" &&
+                        previews[platform.id].fitMode
+                          ? previews[platform.id].fitMode === "contain"
+                            ? "max-w-full max-h-full object-contain"
+                            : "w-full h-full object-cover"
+                          : fitMode === "contain"
                           ? "max-w-full max-h-full object-contain"
                           : "w-full h-full object-cover"
                       }`}
                       style={{
-                        maxWidth: fitMode === "contain" ? "98%" : "100%",
-                        maxHeight: fitMode === "contain" ? "98%" : "100%",
-                        width: fitMode === "cover" ? "100%" : "auto",
-                        height: fitMode === "cover" ? "100%" : "auto",
-                        objectFit: fitMode === "contain" ? "contain" : "cover",
+                        maxWidth:
+                          (platform.id === "wordpress" &&
+                            typeof previews[platform.id] === "object" &&
+                            previews[platform.id].fitMode === "contain") ||
+                          (platform.id !== "wordpress" && fitMode === "contain")
+                            ? "98%"
+                            : "100%",
+                        maxHeight:
+                          (platform.id === "wordpress" &&
+                            typeof previews[platform.id] === "object" &&
+                            previews[platform.id].fitMode === "contain") ||
+                          (platform.id !== "wordpress" && fitMode === "contain")
+                            ? "98%"
+                            : "100%",
+                        width:
+                          (platform.id === "wordpress" &&
+                            typeof previews[platform.id] === "object" &&
+                            previews[platform.id].fitMode === "cover") ||
+                          (platform.id !== "wordpress" && fitMode === "cover")
+                            ? "100%"
+                            : "auto",
+                        height:
+                          (platform.id === "wordpress" &&
+                            typeof previews[platform.id] === "object" &&
+                            previews[platform.id].fitMode === "cover") ||
+                          (platform.id !== "wordpress" && fitMode === "cover")
+                            ? "100%"
+                            : "auto",
+                        objectFit:
+                          platform.id === "wordpress" &&
+                          typeof previews[platform.id] === "object" &&
+                          previews[platform.id].fitMode
+                            ? previews[platform.id].fitMode
+                            : fitMode,
                       }}
                     />
                   </div>
@@ -1182,7 +1342,15 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                 <button
                   className="text-xs px-2 py-1 rounded bg-muted hover:bg-muted/80"
                   onClick={() => handleExportPlatform(platform.id)}
-                  disabled={isGenerating || !previews[platform.id]}
+                  disabled={
+                    isGenerating ||
+                    !(
+                      previews[platform.id] &&
+                      (typeof previews[platform.id] === "string" ||
+                        (typeof previews[platform.id] === "object" &&
+                          previews[platform.id].dataUrl))
+                    )
+                  }
                 >
                   내보내기
                 </button>

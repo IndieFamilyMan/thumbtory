@@ -361,10 +361,18 @@ export default function Canvas({
 
       // 기본 마우스 이벤트 처리
       canvas.on("mouse:down", (e) => {
+        console.log("Canvas: mouse:down 이벤트 발생", {
+          target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
+          isTextEditing: isEditingText(),
+          pointer: e.pointer,
+          button: e.button,
+        });
+
         if (!e.target) return;
 
         // 텍스트 객체 선택 시 처리
-        if (e.target.type === "textbox") {
+        if (e.target.type === "textbox" || e.target.type === "i-text") {
+          console.log("Canvas: 텍스트 객체 선택됨", e.target.id);
           // 선택된 텍스트 객체를 앞으로 가져오기
           canvas.bringObjectToFront(e.target);
           setSelectedElementId(e.target.id);
@@ -376,8 +384,14 @@ export default function Canvas({
       canvas.on("mouse:over", (e) => {
         if (!e.target) return;
 
+        console.log("Canvas: mouse:over 이벤트 발생", {
+          target: `${e.target.type} (id: ${e.target.id})`,
+          selectable: e.target.selectable,
+          evented: e.target.evented,
+        });
+
         // 텍스트 객체에 대한 특별 처리
-        if (e.target.type === "textbox") {
+        if (e.target.type === "textbox" || e.target.type === "i-text") {
           e.target.set("borderColor", "#00aaff");
           e.target.set("cornerColor", "#00aaff");
           canvas.requestRenderAll();
@@ -389,7 +403,7 @@ export default function Canvas({
         if (!e.target) return;
 
         // 텍스트 객체에 대한 특별 처리
-        if (e.target.type === "textbox") {
+        if (e.target.type === "textbox" || e.target.type === "i-text") {
           e.target.set("borderColor", "#0084ff");
           e.target.set("cornerColor", "#0084ff");
           canvas.requestRenderAll();
@@ -398,25 +412,40 @@ export default function Canvas({
 
       // 객체 선택 이벤트 처리
       canvas.on("selection:created", (e) => {
-        console.log("selection:created", e);
+        console.log("Canvas: selection:created 이벤트 발생", {
+          selected: e.selected
+            ? e.selected.map((obj) => `${obj.type} (id: ${obj.id})`)
+            : "없음",
+        });
         handleObjectChange(e);
       });
 
       canvas.on("selection:updated", (e) => {
-        console.log("selection:updated", e);
+        console.log("Canvas: selection:updated 이벤트 발생", {
+          selected: e.selected
+            ? e.selected.map((obj) => `${obj.type} (id: ${obj.id})`)
+            : "없음",
+        });
         handleObjectChange(e);
       });
 
       canvas.on("selection:cleared", (e) => {
-        console.log("selection:cleared", e);
+        console.log("Canvas: selection:cleared 이벤트 발생");
         handleObjectChange(e);
         setSelectedElementId(null);
       });
 
       // 더블 클릭으로 텍스트 편집 모드 진입
       canvas.on("mouse:dblclick", (e) => {
-        if (e.target && e.target.type === "textbox") {
-          console.log("텍스트 더블클릭 - 편집 모드 진입:", e.target.id);
+        console.log("Canvas: mouse:dblclick 이벤트 발생", {
+          target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
+        });
+
+        if (
+          e.target &&
+          (e.target.type === "textbox" || e.target.type === "i-text")
+        ) {
+          console.log("Canvas: 텍스트 더블클릭 - 편집 모드 진입:", e.target.id);
           try {
             // 텍스트 객체를 최상위로 이동
             canvas.bringObjectToFront(e.target);
@@ -434,6 +463,28 @@ export default function Canvas({
             console.error("텍스트 편집 모드 진입 중 오류:", err);
           }
         }
+      });
+
+      // 캔버스 전체 상태 로깅
+      console.log(
+        "Canvas: 현재 캔버스 객체 목록",
+        canvas.getObjects().map((obj) => ({
+          type: obj.type,
+          id: obj.id,
+          selectable: obj.selectable,
+          evented: obj.evented,
+          visible: obj.visible,
+        }))
+      );
+
+      // 캔버스 설정 확인
+      console.log("Canvas: 캔버스 설정", {
+        selection: canvas.selection,
+        skipTargetFind: canvas.skipTargetFind,
+        selectionKey: canvas.selectionKey,
+        selectionFullyContained: canvas.selectionFullyContained,
+        selectionColor: canvas.selectionColor,
+        selectionBorderColor: canvas.selectionBorderColor,
       });
     };
 
@@ -1569,6 +1620,25 @@ export default function Canvas({
     try {
       if (!fabricCanvasRef.current) return;
 
+      console.log("Canvas: handleObjectChange 호출됨", {
+        eventType: e.type,
+        target: e.target
+          ? {
+              type: e.target.type,
+              id: e.target.id,
+              customType: e.target.customType,
+              selectable: e.target.selectable,
+            }
+          : "없음",
+        selected: e.selected
+          ? e.selected.map((obj) => ({
+              type: obj.type,
+              id: obj.id,
+              customType: obj.customType,
+            }))
+          : "없음",
+      });
+
       // 이벤트 타입에 따른 처리
       if (e.type === "textEditing") {
         // 텍스트 편집 시작 시
@@ -1584,7 +1654,11 @@ export default function Canvas({
           fabricCanvasRef.current.bringObjectToFront(e.target);
           fabricCanvasRef.current.renderAll();
         }
-      } else if (e.target && e.target.type === "textbox") {
+      } else if (
+        e.target &&
+        (e.target.type === "textbox" || e.target.type === "i-text")
+      ) {
+        console.log("Canvas: 텍스트 요소 선택됨", e.target.id);
         // 텍스트 요소 선택 시
         if (onSetEditMode) {
           onSetEditMode("text");
@@ -1592,6 +1666,9 @@ export default function Canvas({
         if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
           setShowTextToolbar(true);
         }
+
+        // 선택된 텍스트 객체 ID 상태 업데이트
+        setSelectedElementId(e.target.id);
 
         // 선택된 텍스트 객체 앞으로 가져오기
         fabricCanvasRef.current.bringObjectToFront(e.target);
@@ -1604,6 +1681,9 @@ export default function Canvas({
         if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
           setShowTextToolbar(false);
         }
+
+        // 선택된 이미지 객체 ID 상태 업데이트
+        setSelectedElementId(e.target.id);
       } else if (e.target && e.target.type === "rect") {
         // 사각형 요소 선택 시
         if (onSetEditMode) {
@@ -1612,6 +1692,9 @@ export default function Canvas({
         if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
           setShowTextToolbar(false);
         }
+
+        // 선택된 도형 객체 ID 상태 업데이트
+        setSelectedElementId(e.target.id);
       } else if (
         e.target &&
         (e.target.type === "circle" || e.target.type === "triangle")
@@ -1623,7 +1706,14 @@ export default function Canvas({
         if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
           setShowTextToolbar(false);
         }
+
+        // 선택된 도형 객체 ID 상태 업데이트
+        setSelectedElementId(e.target.id);
       } else if (e.selected && e.selected.length > 1) {
+        console.log(
+          "Canvas: 다중 요소 선택됨",
+          e.selected.map((obj) => obj.id)
+        );
         // 다중 요소 선택 시
         if (onSetEditMode) {
           onSetEditMode("group");
@@ -1631,7 +1721,11 @@ export default function Canvas({
         if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
           setShowTextToolbar(false);
         }
+
+        // 다중 선택 시 선택 ID는 null로 설정 (그룹 선택 상태)
+        setSelectedElementId(null);
       } else {
+        console.log("Canvas: 선택 해제 또는 기타 상황");
         // 선택 해제 시
         if (onSetEditMode) {
           onSetEditMode(null);
@@ -1639,6 +1733,9 @@ export default function Canvas({
         if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
           setShowTextToolbar(false);
         }
+
+        // 선택 해제 시 선택 ID도 초기화
+        setSelectedElementId(null);
       }
 
       // 선택된 객체들 정보 콜백
@@ -1647,7 +1744,10 @@ export default function Canvas({
           // 텍스트 편집 중이면 편집 중인 상태 정보 전달
           if (e.type === "textEditing") {
             const activeObj = fabricCanvasRef.current?.getActiveObject();
-            if (activeObj && activeObj.type === "textbox") {
+            if (
+              activeObj &&
+              (activeObj.type === "textbox" || activeObj.type === "i-text")
+            ) {
               onObjectsSelected([activeObj], "editing");
             }
           }

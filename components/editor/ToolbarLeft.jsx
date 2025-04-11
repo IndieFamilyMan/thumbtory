@@ -24,39 +24,9 @@ export function ToolbarLeft({ isMobileView = false }) {
   const imageInputRef = useRef(null);
   const backgroundImageInputRef = useRef(null);
   const [showGuide, setShowGuide] = useState(true);
-  const [showTextOptions, setShowTextOptions] = useState(false);
-  const [textOptions, setTextOptions] = useState({
-    fontSize: 24,
-    fontFamily: "Arial",
-    color: "#000000",
-    hasStroke: false,
-    strokeColor: "#000000",
-    strokeWidth: 1,
-    rotation: 0,
-  });
 
   // 선택된 요소 정보 추적
   const selectedElement = elements.find((el) => el.id === selectedElementId);
-
-  // 선택된 요소가 텍스트인 경우 텍스트 옵션 업데이트
-  useEffect(() => {
-    if (selectedElement && selectedElement.type === "text") {
-      setTextOptions({
-        fontSize: selectedElement.fontSize || 24,
-        fontFamily: selectedElement.fontFamily || "Arial",
-        color: selectedElement.fill || selectedElement.color || "#000000",
-        hasStroke: (selectedElement.strokeWidth || 0) > 0,
-        strokeColor: selectedElement.stroke || "#000000",
-        strokeWidth: selectedElement.strokeWidth || 1,
-        rotation: selectedElement.rotation || 0,
-      });
-
-      // 텍스트 요소가 선택되면 옵션 패널 열기
-      setShowTextOptions(true);
-    } else {
-      setShowTextOptions(false);
-    }
-  }, [selectedElement]);
 
   // 요소가 추가되면 가이드 메시지 숨기기
   useEffect(() => {
@@ -464,14 +434,6 @@ export function ToolbarLeft({ isMobileView = false }) {
       <div className="flex flex-col gap-3">
         <div className="flex flex-nowrap w-full px-1 py-3 gap-3">
           <button
-            className={`flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px] ${
-              showTextOptions ? "bg-muted/30 border-primary" : ""
-            }`}
-            onClick={handleAddText}
-          >
-            <span className="text-xs">텍스트</span>
-          </button>
-          <button
             className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
             onClick={handleImageButtonClick}
           >
@@ -529,15 +491,6 @@ export function ToolbarLeft({ isMobileView = false }) {
             <span className="text-xs">배경</span>
           </button>
         </div>
-
-        {/* 텍스트 옵션 패널 */}
-        {showTextOptions && (
-          <TextOptions
-            options={textOptions}
-            onOptionChange={handleTextOptionChange}
-            onClose={() => setShowTextOptions(false)}
-          />
-        )}
 
         {/* 삭제 버튼을 별도 행에 배치 - 전체 너비로 확장 */}
         {selectedElementId && (
