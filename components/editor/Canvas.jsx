@@ -1871,7 +1871,7 @@ export default function Canvas({
               console.log("계산된 스케일 - X:", scaleX, "Y:", scaleY);
 
               // 추가 확대 적용
-              const extraScale = 1.5; // 50% 추가 확대로 여백 없이 채움
+              const extraScale = 1.1; // 50% 추가 확대로 여백 없이 채움
               scaleX *= extraScale;
               scaleY *= extraScale;
 
@@ -1907,8 +1907,8 @@ export default function Canvas({
               canvas.backgroundImage = fabricImage;
 
               // 배경 이미지의 위치를 오른쪽으로 조정
-              canvas.backgroundImage.left = canvasWidth / 2 + 100; // 오른쪽으로 100px 이동
-              canvas.backgroundImage.top = canvasHeight / 2;
+              canvas.backgroundImage.left = canvasWidth / 2 + 10; // 오른쪽으로 100px 이동
+              canvas.backgroundImage.top = canvasHeight / 2 + 20;
               canvas.backgroundImage.originX = "center";
               canvas.backgroundImage.originY = "center";
 
@@ -2038,14 +2038,6 @@ export default function Canvas({
             touchAction: "none", // 모바일 터치 동작 방지
           }}
         />
-        <div
-          className="absolute top-2 right-2 text-xs text-gray-500"
-          style={{
-            zIndex: 40,
-          }}
-        >
-          {width} x {height}
-        </div>
       </div>
     </div>
   );
