@@ -16,9 +16,9 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
 
   const [text, setText] = useState("");
   const [fontFamily, setFontFamily] = useState("Arial");
-  const [fontSize, setFontSize] = useState(20);
+  const [fontSize, setFontSize] = useState(30);
   const [fontColor, setFontColor] = useState("#000000");
-  const [isBold, setIsBold] = useState(false);
+  const [isBold, setIsBold] = useState(true);
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
   const [textAlign, setTextAlign] = useState("left");
@@ -350,18 +350,6 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
       return activeObject;
     }
     return null;
-  };
-
-  // Remove selected object
-  const handleRemoveSelected = () => {
-    if (!localCanvas) return;
-
-    const activeObject = localCanvas.getActiveObject();
-    if (activeObject) {
-      localCanvas.remove(activeObject);
-      localCanvas.renderAll();
-      saveState();
-    }
   };
 
   // Bring selected object forward
@@ -816,14 +804,21 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
 
   return (
     <div className={`${styles["text-editor"]} ${className}`}>
-      <div className={styles.controls}>
-        <button onClick={handleAddText} className="flex items-center gap-1">
+      <div className={`${styles.controls} flex flex-col`}>
+        <button
+          onClick={handleAddText}
+          className="flex items-center gap-1 mb-2"
+        >
           <TextCursorInput className="h-4 w-4" />
           텍스트 추가
         </button>
-        <button onClick={handleRemoveSelected}>선택 항목 삭제</button>
-        <button onClick={handleBringForward}>앞으로 가져오기</button>
-        <button onClick={handleSendBackward}>뒤로 보내기</button>
+
+        <button onClick={handleBringForward} className="mb-2">
+          앞으로 가져오기
+        </button>
+        <button onClick={handleSendBackward} className="mb-2">
+          뒤로 보내기
+        </button>
         <button onClick={handleClearCanvas}>캔버스 초기화</button>
       </div>
 

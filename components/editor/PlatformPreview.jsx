@@ -11,6 +11,8 @@ import { useEditorStore } from "@/store/editor";
 import html2canvas from "html2canvas";
 import { useToast } from "@/hooks/use-toast";
 
+import * as fabric from "fabric";
+
 export const PlatformPreview = forwardRef(function PlatformPreview(
   { onExport, standalone = false, isMobileView = false },
   ref
@@ -1333,28 +1335,184 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                       // 여기에서 이동된 요소들 그리기
                       if (hasMoveInfo && window.__WORDPRESS_TEMP_CANVAS__) {
                         // 임시 캔버스에 이동 정보가 적용된 객체들을 개별적으로 렌더링
-                        // 실제로는 이 부분이 더 복잡해질 수 있으며,
-                        // fabric.js의 loadFromJSON 같은 메서드를 사용해야 할 수 있음
                         console.log("이동된 요소들을 이미지에 적용");
 
-                        // 여기서 fabric.js 캔버스를 생성하고 JSON을 로드할 수 있지만,
-                        // 성능 및 복잡성 문제로 현재는 기본 이미지만 사용
                         try {
+                          // 새로운 임시 fabric 캔버스 생성
+                          const fabricTempCanvas = new fabric.Canvas(
+                            document.createElement("canvas")
+                          );
+                          fabricTempCanvas.setWidth(targetWidth);
+                          fabricTempCanvas.setHeight(targetHeight);
+
+                          // 배경 설정 (이미 그려진 이미지와 동일하게)
+                          fabricTempCanvas.backgroundColor = "rgba(0,0,0,0)";
+                          fabricTempCanvas.renderAll();
+
+                          // 대신 활성 캔버스와 직접 이동 정보를 사용하는 방식으로 변경
                           const activeCanvas =
                             window.fabricCanvasInstance ||
                             document.__EDITOR_FABRIC_CANVAS__;
-                          if (
-                            activeCanvas &&
-                            window.__WORDPRESS_TEMP_CANVAS__
-                          ) {
-                            // 이미 이동 정보가 적용된 임시 JSON을 사용
-                            // 실제 구현에서는 이 JSON으로 새 캔버스를 만들어 렌더링할 수 있음
+
+                          if (activeCanvas && window.__WORDPRESS_MOVE_INFO__) {
+                            console.log("직접 이동 정보를 사용하여 요소 배치");
+
+                            // 이동 정보 맵 생성
+                            const moveMap = {};
+                            window.__WORDPRESS_MOVE_INFO__.forEach((item) => {
+                              moveMap[item.id] = {
+                                newLeft: item.newLeft,
+                                newTop: item.newTop,
+                              };
+                            });
+
+                            // 텍스트 요소만 직접 그리기
+                            // (fabric Canvas 사용하지 않고 context 직접 사용)
+                            const textObjects = activeCanvas
+                              .getObjects()
+                              .filter(
+                                (obj) =>
+                                  (obj.type === "text" ||
+                                    obj.type === "textbox" ||
+                                    obj.type === "i-text") &&
+                                  obj.id &&
+                                  moveMap[obj.id]
+                              );
+
                             console.log(
-                              "임시 캔버스 JSON 사용 가능:",
-                              window.__WORDPRESS_TEMP_CANVAS__.objects.length +
-                                "개 객체"
+                              `이동할 텍스트 요소 ${textObjects.length}개 감지됨`
+                            );
+
+                            // 원본 이미지에서 텍스트 요소를 지우기 위해 먼저 배경 이미지만 남기고 다시 그립니다
+                            if (textObjects.length > 0) {
+                              // 원본 이미지 그대로 사용 (텍스트 요소 없이)
+                              // 추가 작업 없음 - 이미 배경이 tempCtx에 그려져 있음
+                            }
+
+                            textObjects.forEach((textObj) => {
+                              const { newLeft, newTop } = moveMap[textObj.id];
+
+                              // 디버깅: 텍스트 객체 상세 정보 출력
+                              console.log("텍스트 객체 상세 정보:", {
+                                id: textObj.id,
+                                type: textObj.type,
+                                text: textObj.text,
+                                fontSize: textObj.fontSize,
+                                fontFamily: textObj.fontFamily,
+                                fill: textObj.fill,
+                                originalPosition: {
+                                  left: textObj.left,
+                                  top: textObj.top,
+                                },
+                                newPosition: { left: newLeft, top: newTop },
+                              });
+
+                              // 안전 영역 계산 (캔버스의 15%) - 실제 프레임 내에 보이도록 조정
+                              const safeX = targetWidth * 0.15;
+                              const safeY = targetHeight * 0.15;
+
+                              // 조정된 위치 계산 - 객체가 프레임 밖으로 나가지 않게
+                              let adjustedLeft = newLeft;
+                              let adjustedTop = newTop;
+
+                              // 객체 크기 계산
+                              const objWidth =
+                                (textObj.width || 100) * (textObj.scaleX || 1);
+                              const objHeight =
+                                (textObj.height || 20) * (textObj.scaleY || 1);
+
+                              // 텍스트가 왼쪽/오른쪽 경계를 벗어나지 않도록
+                              if (adjustedLeft < safeX) {
+                                adjustedLeft = safeX;
+                              } else if (
+                                adjustedLeft + objWidth >
+                                targetWidth - safeX
+                              ) {
+                                adjustedLeft = targetWidth - safeX - objWidth;
+                              }
+
+                              // 텍스트가 상/하 경계를 벗어나지 않도록
+                              if (adjustedTop < safeY) {
+                                adjustedTop = safeY;
+                              } else if (
+                                adjustedTop + objHeight >
+                                targetHeight - safeY
+                              ) {
+                                adjustedTop = targetHeight - safeY - objHeight;
+                              }
+
+                              // 텍스트 스타일 설정
+                              tempCtx.font = `${textObj.fontWeight || ""} ${
+                                textObj.fontSize || 20
+                              }px ${textObj.fontFamily || "Arial"}`;
+                              tempCtx.fillStyle = textObj.fill || "#000000";
+                              tempCtx.textAlign = textObj.textAlign || "left";
+
+                              // 필요하다면 원본 스케일 유지
+                              const scaleFactor = textObj.scaleX || 1;
+                              if (scaleFactor !== 1) {
+                                tempCtx.save();
+                                tempCtx.scale(scaleFactor, scaleFactor);
+                                // 스케일을 적용한 경우 위치 조정
+                                adjustedLeft = adjustedLeft / scaleFactor;
+                                adjustedTop = adjustedTop / scaleFactor;
+                              }
+
+                              // 텍스트 그리기
+                              try {
+                                // 여러 줄 텍스트 처리 (textbox인 경우)
+                                const textContent = textObj.text || "";
+                                const fontSize = textObj.fontSize || 20;
+
+                                if (textContent.includes("\n")) {
+                                  // 여러 줄이면 각 줄 분리해서 그리기
+                                  const lines = textContent.split("\n");
+                                  lines.forEach((line, index) => {
+                                    tempCtx.fillText(
+                                      line,
+                                      adjustedLeft,
+                                      adjustedTop + fontSize * (index + 1)
+                                    );
+                                  });
+                                } else {
+                                  // 한 줄이면 그냥 그리기
+                                  tempCtx.fillText(
+                                    textContent,
+                                    adjustedLeft,
+                                    adjustedTop + fontSize
+                                  );
+                                }
+
+                                // 스케일 변환 되돌리기
+                                if (scaleFactor !== 1) {
+                                  tempCtx.restore();
+                                }
+
+                                console.log(
+                                  `✅ 텍스트 "${textContent.substring(0, 20)}${
+                                    textContent.length > 20 ? "..." : ""
+                                  }" 이동 적용됨`
+                                );
+                              } catch (textErr) {
+                                console.error("텍스트 그리기 오류:", textErr);
+                              }
+
+                              console.log(
+                                `텍스트 "${textObj.text}" 이동됨: (${textObj.left}, ${textObj.top}) → (${adjustedLeft}, ${adjustedTop})`
+                              );
+                            });
+
+                            console.log("✅ 텍스트 요소 이동 적용 완료");
+                          } else {
+                            console.log(
+                              "이동 정보를 적용할 캔버스를 찾을 수 없습니다"
                             );
                           }
+
+                          // 임시 캔버스 리소스 해제
+                          setTimeout(() => {
+                            fabricTempCanvas.dispose();
+                          }, 200);
                         } catch (err) {
                           console.error("이동된 요소 적용 중 오류:", err);
                         }
@@ -1388,6 +1546,186 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                       if (hasMoveInfo && window.__WORDPRESS_TEMP_CANVAS__) {
                         // 임시 캔버스에 이동 정보가 적용된 객체들을 개별적으로 렌더링
                         console.log("이동된 요소들을 이미지에 적용");
+
+                        try {
+                          // 새로운 임시 fabric 캔버스 생성
+                          const fabricTempCanvas = new fabric.Canvas(
+                            document.createElement("canvas")
+                          );
+                          fabricTempCanvas.setWidth(targetWidth);
+                          fabricTempCanvas.setHeight(targetHeight);
+
+                          // 배경 설정 (이미 그려진 이미지와 동일하게)
+                          fabricTempCanvas.backgroundColor = "rgba(0,0,0,0)";
+                          fabricTempCanvas.renderAll();
+
+                          // 대신 활성 캔버스와 직접 이동 정보를 사용하는 방식으로 변경
+                          const activeCanvas =
+                            window.fabricCanvasInstance ||
+                            document.__EDITOR_FABRIC_CANVAS__;
+
+                          if (activeCanvas && window.__WORDPRESS_MOVE_INFO__) {
+                            console.log("직접 이동 정보를 사용하여 요소 배치");
+
+                            // 이동 정보 맵 생성
+                            const moveMap = {};
+                            window.__WORDPRESS_MOVE_INFO__.forEach((item) => {
+                              moveMap[item.id] = {
+                                newLeft: item.newLeft,
+                                newTop: item.newTop,
+                              };
+                            });
+
+                            // 텍스트 요소만 직접 그리기
+                            // (fabric Canvas 사용하지 않고 context 직접 사용)
+                            const textObjects = activeCanvas
+                              .getObjects()
+                              .filter(
+                                (obj) =>
+                                  (obj.type === "text" ||
+                                    obj.type === "textbox" ||
+                                    obj.type === "i-text") &&
+                                  obj.id &&
+                                  moveMap[obj.id]
+                              );
+
+                            console.log(
+                              `이동할 텍스트 요소 ${textObjects.length}개 감지됨`
+                            );
+
+                            // 원본 이미지에서 텍스트 요소를 지우기 위해 먼저 배경 이미지만 남기고 다시 그립니다
+                            if (textObjects.length > 0) {
+                              // 원본 이미지 그대로 사용 (텍스트 요소 없이)
+                              // 추가 작업 없음 - 이미 배경이 tempCtx에 그려져 있음
+                            }
+
+                            textObjects.forEach((textObj) => {
+                              const { newLeft, newTop } = moveMap[textObj.id];
+
+                              // 디버깅: 텍스트 객체 상세 정보 출력
+                              console.log("텍스트 객체 상세 정보:", {
+                                id: textObj.id,
+                                type: textObj.type,
+                                text: textObj.text,
+                                fontSize: textObj.fontSize,
+                                fontFamily: textObj.fontFamily,
+                                fill: textObj.fill,
+                                originalPosition: {
+                                  left: textObj.left,
+                                  top: textObj.top,
+                                },
+                                newPosition: { left: newLeft, top: newTop },
+                              });
+
+                              // 안전 영역 계산 (캔버스의 15%) - 실제 프레임 내에 보이도록 조정
+                              const safeX = targetWidth * 0.15;
+                              const safeY = targetHeight * 0.15;
+
+                              // 조정된 위치 계산 - 객체가 프레임 밖으로 나가지 않게
+                              let adjustedLeft = newLeft;
+                              let adjustedTop = newTop;
+
+                              // 객체 크기 계산
+                              const objWidth =
+                                (textObj.width || 100) * (textObj.scaleX || 1);
+                              const objHeight =
+                                (textObj.height || 20) * (textObj.scaleY || 1);
+
+                              // 텍스트가 왼쪽/오른쪽 경계를 벗어나지 않도록
+                              if (adjustedLeft < safeX) {
+                                adjustedLeft = safeX;
+                              } else if (
+                                adjustedLeft + objWidth >
+                                targetWidth - safeX
+                              ) {
+                                adjustedLeft = targetWidth - safeX - objWidth;
+                              }
+
+                              // 텍스트가 상/하 경계를 벗어나지 않도록
+                              if (adjustedTop < safeY) {
+                                adjustedTop = safeY;
+                              } else if (
+                                adjustedTop + objHeight >
+                                targetHeight - safeY
+                              ) {
+                                adjustedTop = targetHeight - safeY - objHeight;
+                              }
+
+                              // 텍스트 스타일 설정
+                              tempCtx.font = `${textObj.fontWeight || ""} ${
+                                textObj.fontSize || 20
+                              }px ${textObj.fontFamily || "Arial"}`;
+                              tempCtx.fillStyle = textObj.fill || "#000000";
+                              tempCtx.textAlign = textObj.textAlign || "left";
+
+                              // 필요하다면 원본 스케일 유지
+                              const scaleFactor = textObj.scaleX || 1;
+                              if (scaleFactor !== 1) {
+                                tempCtx.save();
+                                tempCtx.scale(scaleFactor, scaleFactor);
+                                // 스케일을 적용한 경우 위치 조정
+                                adjustedLeft = adjustedLeft / scaleFactor;
+                                adjustedTop = adjustedTop / scaleFactor;
+                              }
+
+                              // 텍스트 그리기
+                              try {
+                                // 여러 줄 텍스트 처리 (textbox인 경우)
+                                const textContent = textObj.text || "";
+                                const fontSize = textObj.fontSize || 20;
+
+                                if (textContent.includes("\n")) {
+                                  // 여러 줄이면 각 줄 분리해서 그리기
+                                  const lines = textContent.split("\n");
+                                  lines.forEach((line, index) => {
+                                    tempCtx.fillText(
+                                      line,
+                                      adjustedLeft,
+                                      adjustedTop + fontSize * (index + 1)
+                                    );
+                                  });
+                                } else {
+                                  // 한 줄이면 그냥 그리기
+                                  tempCtx.fillText(
+                                    textContent,
+                                    adjustedLeft,
+                                    adjustedTop + fontSize
+                                  );
+                                }
+
+                                // 스케일 변환 되돌리기
+                                if (scaleFactor !== 1) {
+                                  tempCtx.restore();
+                                }
+
+                                console.log(
+                                  `✅ 텍스트 "${textContent.substring(0, 20)}${
+                                    textContent.length > 20 ? "..." : ""
+                                  }" 이동 적용됨`
+                                );
+                              } catch (textErr) {
+                                console.error("텍스트 그리기 오류:", textErr);
+                              }
+
+                              console.log(
+                                `텍스트 "${textObj.text}" 이동됨: (${textObj.left}, ${textObj.top}) → (${adjustedLeft}, ${adjustedTop})`
+                              );
+                            });
+
+                            console.log("✅ 텍스트 요소 이동 적용 완료");
+                          } else {
+                            console.log(
+                              "이동 정보를 적용할 캔버스를 찾을 수 없습니다"
+                            );
+                          }
+
+                          // 임시 캔버스 리소스 해제
+                          setTimeout(() => {
+                            fabricTempCanvas.dispose();
+                          }, 200);
+                        } catch (err) {
+                          console.error("이동된 요소 적용 중 오류:", err);
+                        }
                       }
                     }
                   } catch (wpError) {
