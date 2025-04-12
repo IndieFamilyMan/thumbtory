@@ -2104,12 +2104,15 @@ export default function Canvas({
       className="relative w-full h-full flex items-center justify-center overflow-hidden"
       style={{
         zIndex: 20,
-        minHeight: "400px",
-        maxHeight: "80vh",
+        minHeight: "300px",
+        maxHeight: "90vh", // Increased for more vertical space
         height: "80%",
+        maxWidth: "800px", // Limit width for desktop mode
+        margin: "0 auto", // Center the container
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        overflowY: "auto", // Allow vertical scrolling
       }}
     >
       <div
@@ -2132,10 +2135,9 @@ export default function Canvas({
             height: "100%",
             maxWidth: "100%",
             maxHeight: "100%",
-            objectFit: "cover",
+            objectFit: "contain", // Maintain aspect ratio
             borderWidth: "2px",
             overflow: "hidden",
-            touchAction: "none", // 모바일 터치 동작 방지
           }}
         />
       </div>

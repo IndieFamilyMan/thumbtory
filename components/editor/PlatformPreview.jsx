@@ -181,57 +181,26 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
     try {
       console.log(`👋 워드프레스 스타일 적용 시작 - 플랫폼 ID: ${platform.id}`);
 
-      // 워드프레스에서는 배경 이미지를 화면에 꽉 채움
       const backgroundImage = canvas.backgroundImage;
-
-      // 디버깅: 배경 이미지 확인
-      if (backgroundImage) {
-        console.log("✅ 배경 이미지 찾음", {
-          width: backgroundImage.width,
-          height: backgroundImage.height,
-          scaleX: backgroundImage.scaleX,
-          scaleY: backgroundImage.scaleY,
-        });
-      } else {
-        console.log("❌ 배경 이미지 없음");
-      }
-
       if (backgroundImage) {
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
 
-        // 이미지와 캔버스 비율 계산
         const imgWidth = backgroundImage.width * (backgroundImage.scaleX || 1);
         const imgHeight =
           backgroundImage.height * (backgroundImage.scaleY || 1);
         const canvasRatio = canvasWidth / canvasHeight;
         const imgRatio = imgWidth / imgHeight;
 
-        // 비율에 따라 이미지 스케일 조정
         let scaleX, scaleY;
-
-        // 항상 꽉채움(cover) 모드로 처리
         if (canvasRatio > imgRatio) {
-          // 캔버스가 이미지보다 가로로 넓은 경우, 너비에 맞춤
           scaleX = canvasWidth / backgroundImage.width;
-          scaleY = scaleX; // 비율 유지
-
-          // 이미지가 가로로 꽉 차도록 추가 확대
-          const extraScale = 1.5; // 50% 추가 확대하여 완전히 채움
-          scaleX *= extraScale;
-          scaleY *= extraScale;
+          scaleY = scaleX;
         } else {
-          // 캔버스가 이미지보다 세로로 긴 경우, 높이에 맞춤
           scaleY = canvasHeight / backgroundImage.height;
-          scaleX = scaleY; // 비율 유지
-
-          // 이미지가 세로로 꽉 차도록 추가 확대
-          const extraScale = 1.5; // 50% 추가 확대하여 완전히 채움
-          scaleX *= extraScale;
-          scaleY *= extraScale;
+          scaleX = scaleY;
         }
 
-        // 이미지 스케일 업데이트
         backgroundImage.set({
           scaleX: scaleX,
           scaleY: scaleY,
@@ -241,121 +210,55 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
           originY: "center",
         });
 
-        // 캔버스 업데이트
         canvas.renderAll();
       }
 
-      // 워드프레스 플랫폼인 경우 요소 이동 정보만 계산 (실제 이동은 하지 않음)
       if (platform.id === "wordpress") {
-        console.log("🔍 워드프레스 요소 이동 계산 시작", {
-          플랫폼: platform.id,
-          캔버스크기: { width: canvas.width, height: canvas.height },
-          객체수: canvas.getObjects().length,
-        });
-
-        // 안전 영역 계산 (캔버스 크기의 15%)
-        const safeZoneX = canvas.width * 0.15;
-        const safeZoneY = canvas.height * 0.15;
-
-        // 모든 객체 정보 출력하여 디버깅
-        const allObjects = canvas.getObjects();
-        console.log(`📋 캔버스에 있는 총 객체 수: ${allObjects.length}`);
-
-        // 이동 가능한 객체 필터링
         const moveableObjects = findTargetObjects(canvas);
-        console.log(`🚶 이동 가능한 객체 수: ${moveableObjects.length}`);
+        const moveInfo = [];
+        const renderedIds = new Set(); // Track rendered elements
 
-        if (moveableObjects.length === 0) {
-          console.log("⚠️ 이동 가능한 요소가 없습니다");
-        } else {
-          // 안전 영역 계산 (워드프레스 플랫폼 크기의 15% - 미리보기와 동일한 비율)
-          const safeZoneX = canvas.width * 0.15;
-          const safeZoneY = canvas.height * 0.15;
+        moveableObjects.forEach((obj) => {
+          if (!obj || obj.width === undefined || obj.height === undefined) {
+            return;
+          }
 
-          // 이동 정보 계산 (실제로 요소를 이동시키지 않음)
-          const moveInfo = [];
+          if (renderedIds.has(obj.id)) {
+            return; // Skip if already rendered
+          }
 
-          // 모든 요소 처리
-          moveableObjects.forEach((obj) => {
-            // 객체가 null이거나 필수 속성이 없는 경우 건너뜀
-            if (!obj || obj.width === undefined || obj.height === undefined) {
-              console.log("⚠️ 유효하지 않은 객체 발견:", obj);
-              return;
-            }
+          const objScaleX = obj.scaleX !== undefined ? obj.scaleX : 1;
+          const objScaleY = obj.scaleY !== undefined ? obj.scaleY : 1;
 
-            // scaleX와 scaleY가 undefined인 경우 기본값 1 사용
-            const objScaleX = obj.scaleX !== undefined ? obj.scaleX : 1;
-            const objScaleY = obj.scaleY !== undefined ? obj.scaleY : 1;
+          const objWidth = obj.width * objScaleX;
+          const objHeight = obj.height * objScaleY;
 
-            // 객체 크기 계산 - NaN 방지를 위한 안전한 계산
-            const objWidth = obj.width * objScaleX;
-            const objHeight = obj.height * objScaleY;
+          if (typeof obj.left !== "number" || typeof obj.top !== "number") {
+            return;
+          }
 
-            // left와 top이 숫자인지 확인
-            if (
-              typeof obj.left !== "number" ||
-              typeof obj.top !== "number" ||
-              isNaN(obj.left) ||
-              isNaN(obj.top)
-            ) {
-              console.log("⚠️ 유효하지 않은 위치 값을 가진 객체:", obj);
-              return;
-            }
+          // Hide original text elements
+          obj.visible = false;
 
-            // 원래 위치 저장 (위치 비교용)
-            const originalPosition = {
-              left: obj.left,
-              top: obj.top,
-            };
+          // Calculate position ratios
+          const leftRatio = obj.left / canvas.width;
+          const topRatio = obj.top / canvas.height;
 
-            // 각 가장자리에 대한 거리 계산
-            const distToLeft = obj.left;
-            const distToRight = canvas.width - (obj.left + objWidth);
-            const distToTop = obj.top;
-            const distToBottom = canvas.height - (obj.top + objHeight);
+          // Apply ratios to WordPress canvas
+          const newLeft = leftRatio * platform.width;
+          const newTop = topRatio * platform.height;
 
-            // 안전 영역 이탈 확인 및 이동 거리 계산
-            let moveX = 0;
-            let moveY = 0;
-
-            if (distToLeft < safeZoneX) moveX = safeZoneX - distToLeft;
-            else if (distToRight < safeZoneX)
-              moveX = -(safeZoneX - distToRight);
-
-            if (distToTop < safeZoneY) moveY = safeZoneY - distToTop;
-            else if (distToBottom < safeZoneY)
-              moveY = -(safeZoneY - distToBottom);
-
-            // 이동이 필요한 경우에만 정보 저장
-            if (moveX !== 0 || moveY !== 0) {
-              console.log(`🔄 요소 이동 계산 (실제 이동 없음): ${obj.type}`, {
-                id: obj.id || "없음",
-                이동전: { left: obj.left, top: obj.top },
-                이동량: { x: moveX, y: moveY },
-                이동후예상: { left: obj.left + moveX, top: obj.top + moveY },
-              });
-
-              // 이동 정보만 저장 (실제 요소는 이동시키지 않음)
-              moveInfo.push({
-                id: obj.id,
-                type: obj.type,
-                originalLeft: obj.left,
-                originalTop: obj.top,
-                moveX: moveX,
-                moveY: moveY,
-                newLeft: obj.left + moveX,
-                newTop: obj.top + moveY,
-              });
-            }
+          moveInfo.push({
+            id: obj.id,
+            type: obj.type,
+            newLeft: newLeft,
+            newTop: newTop,
           });
 
-          console.log(
-            `🎯 워드프레스 플랫폼 요소 이동 계산 완료: ${moveInfo.length}개 요소`
-          );
+          renderedIds.add(obj.id); // Mark as rendered
+        });
 
-          // 이미지 생성 시 참조할 수 있도록 전역 변수에 저장
-          window.__WORDPRESS_MOVE_INFO__ = moveInfo;
-        }
+        window.__WORDPRESS_MOVE_INFO__ = moveInfo;
       }
 
       return canvas;
@@ -1363,8 +1266,22 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                               moveMap[item.id] = {
                                 newLeft: item.newLeft,
                                 newTop: item.newTop,
+                                originalLeft: item.originalLeft,
+                                originalTop: item.originalTop,
+                                moveX: item.moveX,
+                                moveY: item.moveY,
                               };
                             });
+
+                            // 캔버스-대상 비율 계산 추가
+                            const scaleRatio = targetWidth / activeCanvas.width;
+                            console.log(
+                              `캔버스-대상 비율 계산: ${scaleRatio} (${targetWidth} / ${activeCanvas.width})`
+                            );
+
+                            // 안전 영역 계산
+                            const safeZoneX = targetWidth * 0.15;
+                            const safeZoneY = targetHeight * 0.15;
 
                             // 텍스트 요소만 직접 그리기
                             // (fabric Canvas 사용하지 않고 context 직접 사용)
@@ -1407,62 +1324,78 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                                 newPosition: { left: newLeft, top: newTop },
                               });
 
-                              // 안전 영역 계산 (캔버스의 15%) - 실제 프레임 내에 보이도록 조정
-                              const safeX = targetWidth * 0.15;
-                              const safeY = targetHeight * 0.15;
+                              // 원본 위치를 유지하되 안전 영역을 벗어난 경우에만 조정
+                              // 원본 위치에 스케일 적용
+                              let adjustedLeft = textObj.left * scaleRatio;
+                              let adjustedTop = textObj.top * scaleRatio;
 
-                              // 조정된 위치 계산 - 객체가 프레임 밖으로 나가지 않게
-                              let adjustedLeft = newLeft;
-                              let adjustedTop = newTop;
-
-                              // 객체 크기 계산
+                              // 이동 필요한 경우 (안전 영역 밖에 있는 경우)에만 이동
                               const objWidth =
-                                (textObj.width || 100) * (textObj.scaleX || 1);
+                                textObj.width *
+                                (textObj.scaleX || 1) *
+                                scaleRatio;
                               const objHeight =
-                                (textObj.height || 20) * (textObj.scaleY || 1);
+                                textObj.height *
+                                (textObj.scaleY || 1) *
+                                scaleRatio;
 
-                              // 텍스트가 왼쪽/오른쪽 경계를 벗어나지 않도록
-                              if (adjustedLeft < safeX) {
-                                adjustedLeft = safeX;
-                              } else if (
+                              // 객체가 안전 영역을 벗어나는지 확인
+                              const isOutsideSafeZone =
+                                adjustedLeft < safeZoneX ||
                                 adjustedLeft + objWidth >
-                                targetWidth - safeX
-                              ) {
-                                adjustedLeft = targetWidth - safeX - objWidth;
-                              }
-
-                              // 텍스트가 상/하 경계를 벗어나지 않도록
-                              if (adjustedTop < safeY) {
-                                adjustedTop = safeY;
-                              } else if (
+                                  targetWidth - safeZoneX ||
+                                adjustedTop < safeZoneY ||
                                 adjustedTop + objHeight >
-                                targetHeight - safeY
-                              ) {
-                                adjustedTop = targetHeight - safeY - objHeight;
+                                  targetHeight - safeZoneY;
+
+                              if (isOutsideSafeZone) {
+                                console.log(
+                                  `요소 ${textObj.id}가 안전 영역을 벗어남 - 위치 조정 필요`
+                                );
+
+                                // 안전 영역 내부로 이동
+                                if (adjustedLeft < safeZoneX) {
+                                  adjustedLeft = safeZoneX;
+                                } else if (
+                                  adjustedLeft + objWidth >
+                                  targetWidth - safeZoneX
+                                ) {
+                                  adjustedLeft =
+                                    targetWidth - safeZoneX - objWidth;
+                                }
+
+                                if (adjustedTop < safeZoneY) {
+                                  adjustedTop = safeZoneY;
+                                } else if (
+                                  adjustedTop + objHeight >
+                                  targetHeight - safeZoneY
+                                ) {
+                                  adjustedTop =
+                                    targetHeight - safeZoneY - objHeight;
+                                }
+                              } else {
+                                console.log(
+                                  `요소 ${textObj.id}는 안전 영역 내에 있음 - 위치 조정 불필요`
+                                );
                               }
 
                               // 텍스트 스타일 설정
-                              tempCtx.font = `${textObj.fontWeight || ""} ${
-                                textObj.fontSize || 20
-                              }px ${textObj.fontFamily || "Arial"}`;
+                              const fontSize =
+                                (textObj.fontSize || 20) *
+                                scaleRatio *
+                                (textObj.scaleX || 1);
+                              tempCtx.font = `${
+                                textObj.fontWeight || ""
+                              } ${fontSize}px ${textObj.fontFamily || "Arial"}`;
                               tempCtx.fillStyle = textObj.fill || "#000000";
                               tempCtx.textAlign = textObj.textAlign || "left";
 
-                              // 필요하다면 원본 스케일 유지
-                              const scaleFactor = textObj.scaleX || 1;
-                              if (scaleFactor !== 1) {
-                                tempCtx.save();
-                                tempCtx.scale(scaleFactor, scaleFactor);
-                                // 스케일을 적용한 경우 위치 조정
-                                adjustedLeft = adjustedLeft / scaleFactor;
-                                adjustedTop = adjustedTop / scaleFactor;
-                              }
+                              // 스케일 별도 적용 제거 - 이미 fontSize에 스케일 적용됨
 
                               // 텍스트 그리기
                               try {
                                 // 여러 줄 텍스트 처리 (textbox인 경우)
                                 const textContent = textObj.text || "";
-                                const fontSize = textObj.fontSize || 20;
 
                                 if (textContent.includes("\n")) {
                                   // 여러 줄이면 각 줄 분리해서 그리기
@@ -1471,7 +1404,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                                     tempCtx.fillText(
                                       line,
                                       adjustedLeft,
-                                      adjustedTop + fontSize * (index + 1)
+                                      adjustedTop + fontSize * 0.8 * (index + 1)
                                     );
                                   });
                                 } else {
@@ -1479,13 +1412,8 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                                   tempCtx.fillText(
                                     textContent,
                                     adjustedLeft,
-                                    adjustedTop + fontSize
+                                    adjustedTop + fontSize * 0.8
                                   );
-                                }
-
-                                // 스케일 변환 되돌리기
-                                if (scaleFactor !== 1) {
-                                  tempCtx.restore();
                                 }
 
                                 console.log(
@@ -1498,7 +1426,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                               }
 
                               console.log(
-                                `텍스트 "${textObj.text}" 이동됨: (${textObj.left}, ${textObj.top}) → (${adjustedLeft}, ${adjustedTop})`
+                                `텍스트 "${textObj.text}" 이동됨: (${textObj.left}×${scaleRatio}, ${textObj.top}×${scaleRatio}) → (${adjustedLeft}, ${adjustedTop})`
                               );
                             });
 
@@ -1573,8 +1501,22 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                               moveMap[item.id] = {
                                 newLeft: item.newLeft,
                                 newTop: item.newTop,
+                                originalLeft: item.originalLeft,
+                                originalTop: item.originalTop,
+                                moveX: item.moveX,
+                                moveY: item.moveY,
                               };
                             });
+
+                            // 캔버스-대상 비율 계산
+                            const scaleRatio = targetWidth / activeCanvas.width;
+                            console.log(
+                              `캔버스-대상 비율 계산: ${scaleRatio} (${targetWidth} / ${activeCanvas.width})`
+                            );
+
+                            // 안전 영역 계산
+                            const safeZoneX = targetWidth * 0.15;
+                            const safeZoneY = targetHeight * 0.15;
 
                             // 텍스트 요소만 직접 그리기
                             // (fabric Canvas 사용하지 않고 context 직접 사용)
@@ -1617,62 +1559,78 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                                 newPosition: { left: newLeft, top: newTop },
                               });
 
-                              // 안전 영역 계산 (캔버스의 15%) - 실제 프레임 내에 보이도록 조정
-                              const safeX = targetWidth * 0.15;
-                              const safeY = targetHeight * 0.15;
+                              // 원본 위치를 유지하되 안전 영역을 벗어난 경우에만 조정
+                              // 원본 위치에 스케일 적용
+                              let adjustedLeft = textObj.left * scaleRatio;
+                              let adjustedTop = textObj.top * scaleRatio;
 
-                              // 조정된 위치 계산 - 객체가 프레임 밖으로 나가지 않게
-                              let adjustedLeft = newLeft;
-                              let adjustedTop = newTop;
-
-                              // 객체 크기 계산
+                              // 이동 필요한 경우 (안전 영역 밖에 있는 경우)에만 이동
                               const objWidth =
-                                (textObj.width || 100) * (textObj.scaleX || 1);
+                                textObj.width *
+                                (textObj.scaleX || 1) *
+                                scaleRatio;
                               const objHeight =
-                                (textObj.height || 20) * (textObj.scaleY || 1);
+                                textObj.height *
+                                (textObj.scaleY || 1) *
+                                scaleRatio;
 
-                              // 텍스트가 왼쪽/오른쪽 경계를 벗어나지 않도록
-                              if (adjustedLeft < safeX) {
-                                adjustedLeft = safeX;
-                              } else if (
+                              // 객체가 안전 영역을 벗어나는지 확인
+                              const isOutsideSafeZone =
+                                adjustedLeft < safeZoneX ||
                                 adjustedLeft + objWidth >
-                                targetWidth - safeX
-                              ) {
-                                adjustedLeft = targetWidth - safeX - objWidth;
-                              }
-
-                              // 텍스트가 상/하 경계를 벗어나지 않도록
-                              if (adjustedTop < safeY) {
-                                adjustedTop = safeY;
-                              } else if (
+                                  targetWidth - safeZoneX ||
+                                adjustedTop < safeZoneY ||
                                 adjustedTop + objHeight >
-                                targetHeight - safeY
-                              ) {
-                                adjustedTop = targetHeight - safeY - objHeight;
+                                  targetHeight - safeZoneY;
+
+                              if (isOutsideSafeZone) {
+                                console.log(
+                                  `요소 ${textObj.id}가 안전 영역을 벗어남 - 위치 조정 필요`
+                                );
+
+                                // 안전 영역 내부로 이동
+                                if (adjustedLeft < safeZoneX) {
+                                  adjustedLeft = safeZoneX;
+                                } else if (
+                                  adjustedLeft + objWidth >
+                                  targetWidth - safeZoneX
+                                ) {
+                                  adjustedLeft =
+                                    targetWidth - safeZoneX - objWidth;
+                                }
+
+                                if (adjustedTop < safeZoneY) {
+                                  adjustedTop = safeZoneY;
+                                } else if (
+                                  adjustedTop + objHeight >
+                                  targetHeight - safeZoneY
+                                ) {
+                                  adjustedTop =
+                                    targetHeight - safeZoneY - objHeight;
+                                }
+                              } else {
+                                console.log(
+                                  `요소 ${textObj.id}는 안전 영역 내에 있음 - 위치 조정 불필요`
+                                );
                               }
 
                               // 텍스트 스타일 설정
-                              tempCtx.font = `${textObj.fontWeight || ""} ${
-                                textObj.fontSize || 20
-                              }px ${textObj.fontFamily || "Arial"}`;
+                              const fontSize =
+                                (textObj.fontSize || 20) *
+                                scaleRatio *
+                                (textObj.scaleX || 1);
+                              tempCtx.font = `${
+                                textObj.fontWeight || ""
+                              } ${fontSize}px ${textObj.fontFamily || "Arial"}`;
                               tempCtx.fillStyle = textObj.fill || "#000000";
                               tempCtx.textAlign = textObj.textAlign || "left";
 
-                              // 필요하다면 원본 스케일 유지
-                              const scaleFactor = textObj.scaleX || 1;
-                              if (scaleFactor !== 1) {
-                                tempCtx.save();
-                                tempCtx.scale(scaleFactor, scaleFactor);
-                                // 스케일을 적용한 경우 위치 조정
-                                adjustedLeft = adjustedLeft / scaleFactor;
-                                adjustedTop = adjustedTop / scaleFactor;
-                              }
+                              // 스케일 별도 적용 제거 - 이미 fontSize에 스케일 적용됨
 
                               // 텍스트 그리기
                               try {
                                 // 여러 줄 텍스트 처리 (textbox인 경우)
                                 const textContent = textObj.text || "";
-                                const fontSize = textObj.fontSize || 20;
 
                                 if (textContent.includes("\n")) {
                                   // 여러 줄이면 각 줄 분리해서 그리기
@@ -1681,7 +1639,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                                     tempCtx.fillText(
                                       line,
                                       adjustedLeft,
-                                      adjustedTop + fontSize * (index + 1)
+                                      adjustedTop + fontSize * 0.8 * (index + 1)
                                     );
                                   });
                                 } else {
@@ -1689,13 +1647,8 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                                   tempCtx.fillText(
                                     textContent,
                                     adjustedLeft,
-                                    adjustedTop + fontSize
+                                    adjustedTop + fontSize * 0.8
                                   );
-                                }
-
-                                // 스케일 변환 되돌리기
-                                if (scaleFactor !== 1) {
-                                  tempCtx.restore();
                                 }
 
                                 console.log(
@@ -1708,7 +1661,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
                               }
 
                               console.log(
-                                `텍스트 "${textObj.text}" 이동됨: (${textObj.left}, ${textObj.top}) → (${adjustedLeft}, ${adjustedTop})`
+                                `텍스트 "${textObj.text}" 이동됨: (${textObj.left}×${scaleRatio}, ${textObj.top}×${scaleRatio}) → (${adjustedLeft}, ${adjustedTop})`
                               );
                             });
 

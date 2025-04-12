@@ -813,12 +813,6 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
           텍스트 추가
         </button>
 
-        <button onClick={handleBringForward} className="mb-2">
-          앞으로 가져오기
-        </button>
-        <button onClick={handleSendBackward} className="mb-2">
-          뒤로 보내기
-        </button>
         <button onClick={handleClearCanvas}>캔버스 초기화</button>
       </div>
 

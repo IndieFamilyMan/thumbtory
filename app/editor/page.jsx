@@ -18,7 +18,7 @@ import { ChevronLeft, Save } from "lucide-react";
 
 export default function EditorPage() {
   const [isMobile, setIsMobile] = useState(false);
-  const [showSeoDialog, setShowSeoDialog] = useState(false);
+
   const [canvasRef, setCanvasRef] = useState(null);
   const [fabricCanvas, setFabricCanvas] = useState(null);
   const {
@@ -40,6 +40,20 @@ export default function EditorPage() {
   const platformPreviewRef = useRef(null);
   const [showEmptyMessage, setShowEmptyMessage] = useState(true);
   const router = useRouter();
+  const [showSeoDialog, setShowSeoDialog] = useState(false);
+
+  // Add SEO options form below the text editor
+  const [seoData, setSeoData] = useState({
+    filename: "",
+    altText: "",
+    description: "",
+    keywords: "",
+  });
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setSeoData((prevData) => ({ ...prevData, [name]: value }));
+  };
 
   // 화면 크기에 따라 모바일 여부 감지
   useEffect(() => {
@@ -95,11 +109,6 @@ export default function EditorPage() {
     }
   };
 
-  // SEO 설정 다이얼로그 표시
-  const handleShowSeoDialog = () => {
-    setShowSeoDialog(true);
-  };
-
   // 에디터 페이지를 떠날 때 리셋
   useEffect(() => {
     return () => {
@@ -107,10 +116,12 @@ export default function EditorPage() {
     };
   }, []);
 
+  // Update export logic to use form values
   const handleExport = () => {
+    // Use seoData for exporting
     toast({
       title: "내보내기 기능",
-      description: "이미지 내보내기 기능은 현재 개발 중입니다.",
+      description: `이미지 내보내기 기능은 현재 개발 중입니다. 파일명: ${seoData.filename}`,
     });
   };
 
@@ -169,43 +180,6 @@ export default function EditorPage() {
         {/* 툴바 */}
         <Toolbar />
 
-        {/* 이미지 편집 - 툴바 */}
-        <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">이미지 편집</h2>
-          <ToolbarLeft isMobileView={isMobile} />
-        </div>
-
-        {/* 텍스트, 요소 - 캔버스 */}
-        <div className="p-6 border-b">
-          <div
-            className="aspect-video flex items-center justify-center"
-            style={{ height: "450px" }}
-          >
-            <Canvas
-              setCanvasRef={setCanvasRef}
-              setShowTextToolbar={() => {}}
-              onTextEdit={() => {}}
-              setIsTextEditing={() => {}}
-              onCanvasReady={(canvasInstance) => {
-                setFabricCanvas(canvasInstance);
-                console.log("캔버스가 준비되었습니다.");
-              }}
-            />
-          </div>
-        </div>
-
-        {/* 텍스트 에디터 영역 */}
-        <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">텍스트 에디터</h2>
-          <TextEditor
-            canvas={fabricCanvas}
-            onTextUpdated={(textObject) => {
-              console.log("텍스트 업데이트됨:", textObject?.text);
-              // 캔버스 상태 저장 및 기타 필요한 처리
-            }}
-          />
-        </div>
-
         {/* 플랫폼 설정 */}
         <div className="p-6 border-b">
           <h2 className="font-medium text-lg mb-4">플랫폼 설정</h2>
@@ -231,35 +205,132 @@ export default function EditorPage() {
             ))}
           </div>
         </div>
-
-        {/* 미리보기 */}
+        {/* 이미지 편집 - 툴바 */}
         <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">미리보기</h2>
-          <div className="overflow-auto" style={{ height: "400px" }}>
-            <Preview isMobileView={isMobile} />
+          <h2 className="font-medium text-lg mb-4">이미지 편집</h2>
+          <ToolbarLeft isMobileView={isMobile} />
+        </div>
+
+        {/* 텍스트, 요소 - 캔버스 */}
+        <div className="p-6 border-b">
+          <div
+            className="aspect-video flex items-center justify-center"
+            style={{ height: "300px" }}
+          >
+            <Canvas
+              setCanvasRef={setCanvasRef}
+              setShowTextToolbar={() => {}}
+              onTextEdit={() => {}}
+              setIsTextEditing={() => {}}
+              onCanvasReady={(canvasInstance) => {
+                setFabricCanvas(canvasInstance);
+                console.log("캔버스가 준비되었습니다.");
+              }}
+            />
           </div>
+        </div>
+
+        {/* 텍스트 에디터 영역 */}
+        <div className="p-6 border-b">
+          <h2 className="font-medium text-lg mb-4">텍스트 에디터</h2>
+          <TextEditor
+            canvas={fabricCanvas}
+            onTextUpdated={(textObject) => {
+              console.log("텍스트 업데이트됨:", textObject?.text);
+            }}
+          />
+        </div>
+
+        {/* 플랫폼별 SEO 최적화 가이드 */}
+        <div className="mt-4 border-t pt-3">
+          <h4 className="text-xs font-medium mb-2">
+            플랫폼별 썸네일 최적화 가이드
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-muted/30">
+                  <th className="border border-border p-1 text-left">항목</th>
+                  <th className="border border-border p-1 text-left">
+                    네이버 블로그
+                  </th>
+                  <th className="border border-border p-1 text-left">
+                    티스토리
+                  </th>
+                  <th className="border border-border p-1 text-left">
+                    워드프레스
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border border-border p-1 font-medium">
+                    최적 썸네일 사이즈
+                  </td>
+                  <td className="border border-border p-1">
+                    750 x 750 px 또는 1200 x 630 px
+                  </td>
+                  <td className="border border-border p-1">
+                    1200 x 675 px (16:9)
+                  </td>
+                  <td className="border border-border p-1">1200 x 628 px</td>
+                </tr>
+                <tr>
+                  <td className="border border-border p-1 font-medium">
+                    최대 권장 용량
+                  </td>
+                  <td className="border border-border p-1">
+                    3MB 이하 (2MB 권장)
+                  </td>
+                  <td className="border border-border p-1">3MB 이하</td>
+                  <td className="border border-border p-1">200KB~500KB 권장</td>
+                </tr>
+                <tr>
+                  <td className="border border-border p-1 font-medium">
+                    이미지 포맷
+                  </td>
+                  <td className="border border-border p-1">JPG, PNG</td>
+                  <td className="border border-border p-1">JPG, PNG, WEBP</td>
+                  <td className="border border-border p-1">
+                    JPG, PNG, WEBP (WEBP 권장)
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-border p-1 font-medium">
+                    파일명
+                  </td>
+                  <td className="border border-border p-1 whitespace-nowrap">
+                    영어 + 키워드 포함
+                  </td>
+                  <td className="border border-border p-1 whitespace-nowrap">
+                    영어 + 키워드 포함
+                  </td>
+                  <td className="border border-border p-1 whitespace-nowrap">
+                    영어 + 키워드 포함
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-border p-1 font-medium">
+                    ALT 태그
+                  </td>
+                  <td className="border border-border p-1">
+                    이미지 설명에 키워드 입력
+                  </td>
+                  <td className="border border-border p-1">
+                    &lt;img&gt; 삽입 시 직접 설정
+                  </td>
+                  <td className="border border-border p-1">직접 입력 필수</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            <span className="font-medium">📌 추가 팁:</span> WEBP 포맷은 로딩
+            속도가 빠르고 SEO에 유리합니다. 파일명과 ALT 텍스트에 주요 키워드를
+            포함하면 검색 엔진 노출에 도움이 됩니다.
+          </p>
         </div>
       </div>
-
-      {showSeoDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-background p-6 rounded-lg shadow-lg w-[90%] max-w-[400px]">
-            <h2 className="text-lg font-semibold mb-4">이미지 SEO 설정</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              SEO 설정은 오른쪽 속성 패널의 "디자인 설정" 영역에서 편집하실 수
-              있습니다.
-            </p>
-            <div className="flex justify-end">
-              <button
-                className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                onClick={() => setShowSeoDialog(false)}
-              >
-                확인
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
