@@ -380,6 +380,55 @@ export default function Canvas({
         }
       });
 
+      // 텍스트 이동 중 해상도 유지를 위한 이벤트 처리
+      canvas.on("object:moving", (e) => {
+        if (
+          e.target &&
+          (e.target.type === "textbox" || e.target.type === "i-text")
+        ) {
+          // 이동 중 텍스트 렌더링 품질 최적화
+          e.target.set({
+            objectCaching: false,
+            dirty: true,
+          });
+          // 텍스트 객체를 최상위로 가져오기
+          canvas.bringObjectToFront(e.target);
+          canvas.renderAll();
+        }
+      });
+
+      // 객체 수정 완료 후 처리
+      canvas.on("object:modified", (e) => {
+        if (
+          e.target &&
+          (e.target.type === "textbox" || e.target.type === "i-text")
+        ) {
+          // 객체 위치 업데이트
+          if (e.target.id) {
+            // 이동 후 상태 업데이트
+            updateElementProperty(e.target.id, "x", e.target.left);
+            updateElementProperty(e.target.id, "y", e.target.top);
+
+            // 회전이나 스케일 변경 시
+            if (e.target.angle !== 0) {
+              updateElementProperty(e.target.id, "rotation", e.target.angle);
+            }
+            if (e.target.scaleX !== 1) {
+              updateElementProperty(e.target.id, "scaleX", e.target.scaleX);
+            }
+            if (e.target.scaleY !== 1) {
+              updateElementProperty(e.target.id, "scaleY", e.target.scaleY);
+            }
+
+            // 상태 저장
+            saveState();
+          }
+
+          // 이동 후 캔버스 다시 렌더링하여 선명도 유지
+          canvas.renderAll();
+        }
+      });
+
       // 마우스 오버 이벤트 - 선택 가능한 객체 강조 표시
       canvas.on("mouse:over", (e) => {
         if (!e.target) return;
@@ -724,6 +773,12 @@ export default function Canvas({
         selectionLineWidth: 1,
         hoverCursor: "pointer",
         defaultCursor: "default",
+        // 텍스트 렌더링 품질 개선을 위한 설정
+        textSmoothingEnabled: true,
+        antialias: true,
+        renderOnAddRemove: true,
+        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 3), // 최소 3배로 증가
+        imageSmoothingQuality: "high",
       });
 
       // 캔버스 참조 저장
@@ -1303,6 +1358,12 @@ export default function Canvas({
     // 텍스트 편집 중이면 처리하지 않음
     if (isEditingText()) return;
 
+    // 드로잉 모드 비활성화 확인
+    if (fabricCanvasRef.current.isDrawingMode) {
+      fabricCanvasRef.current.isDrawingMode = false;
+      setIsDrawMode(false);
+    }
+
     try {
       console.log(
         "요소 렌더링 시작, 요소 수:",
@@ -1458,6 +1519,45 @@ export default function Canvas({
               erasable: false,
               dirty: true,
               __corner: 0,
+              // 텍스트 렌더링 품질 개선 설정
+              objectCaching: false, // 움직일 때 해상도 유지를 위해 캐싱 비활성화
+              cacheProperties: [
+                "fill",
+                "stroke",
+                "strokeWidth",
+                "width",
+                "height",
+                "strokeDashArray",
+                "strokeLineCap",
+                "strokeDashOffset",
+                "strokeLineJoin",
+                "strokeMiterLimit",
+                "fontSize",
+                "fontWeight",
+                "fontFamily",
+                "fontStyle",
+                "lineHeight",
+                "underline",
+                "overline",
+                "linethrough",
+                "textAlign",
+                "text",
+                "charSpacing",
+                "styles",
+                "direction",
+                "path",
+                "pathStartOffset",
+                "pathSide",
+              ],
+              noScaleCache: true, // 스케일링 시 캐시 사용 비활성화
+              // 텍스트 렌더링 안티앨리어싱 개선 설정
+              statefullCache: true,
+              strokeUniform: true,
+              miterLimit: 10, // 텍스트 모서리 부드럽게 처리
+              paintFirst: "fill",
+              shadow: null, // 그림자 효과 제거 (텍스트 선명도 향상)
+              textRendering: "optimizeLegibility", // 텍스트 렌더링 최적화
+              moveCursor: "text", // 이동 시 커서 스타일
             });
 
             // 텍스트 요소를 캔버스에 추가
@@ -1504,8 +1604,9 @@ export default function Canvas({
             if (!canvasInstance) return null;
             return canvasInstance.toDataURL({
               format: "png",
-              quality: 1,
-              multiplier: window.devicePixelRatio || 1,
+              quality: 1.0,
+              multiplier: Math.max(window.devicePixelRatio || 1, 4), // 해상도를 4배로 증가
+              enableRetinaScaling: true,
             });
           } catch (error) {
             console.error("Canvas export error:", error);
@@ -2097,6 +2198,65 @@ export default function Canvas({
       canvas.off("object:modified");
     };
   }, [canvas]);
+
+  useEffect(() => {
+    if (fabricCanvasRef.current && onCanvasReady) {
+      onCanvasReady(fabricCanvasRef.current);
+
+      // 추가: 드로잉 모드 비활성화 보장
+      if (fabricCanvasRef.current.isDrawingMode) {
+        fabricCanvasRef.current.isDrawingMode = false;
+        setIsDrawMode(false);
+        console.log("onCanvasReady에서 드로잉 모드 비활성화");
+      }
+    }
+  }, [fabricCanvasRef.current, onCanvasReady]);
+
+  // 초기화 시 그리기 모드 비활성화 보장
+  useEffect(() => {
+    // isDrawMode 상태를 false로 설정
+    setIsDrawMode(false);
+
+    if (fabricCanvasRef.current) {
+      // 캔버스의 drawing mode 비활성화
+      fabricCanvasRef.current.isDrawingMode = false;
+
+      // 모든 객체를 선택 가능하도록 설정
+      fabricCanvasRef.current.selection = true;
+      fabricCanvasRef.current.forEachObject((obj) => {
+        if (obj.id !== "canvas-border" && obj.type !== "border") {
+          obj.selectable = true;
+          obj.evented = true;
+        }
+      });
+
+      // 텍스트 렌더링 품질 개선을 위한 추가 설정
+      fabricCanvasRef.current.enableRetinaScaling = true;
+      fabricCanvasRef.current.imageSmoothingEnabled = true;
+
+      fabricCanvasRef.current.renderAll();
+      console.log("드로잉 모드 비활성화 완료");
+    }
+  }, [canvasReady]);
+
+  // Fabric.js 전역 옵션 설정 - 텍스트 렌더링 품질 향상
+  useEffect(() => {
+    if (typeof fabric !== "undefined") {
+      // 텍스트 렌더링 품질 관련 설정
+      fabric.Object.prototype.objectCaching = false;
+      fabric.Object.prototype.noScaleCache = true;
+      fabric.Object.prototype.statefullCache = true;
+      fabric.Object.prototype.strokeUniform = true;
+      fabric.Text.prototype.textShadow = null;
+
+      // 모든 텍스트 객체의 기본 텍스트 렌더링 설정
+      if (fabric.textRenderingMode) {
+        fabric.textRenderingMode = "optimizeLegibility";
+      }
+
+      console.log("Fabric.js 전역 텍스트 렌더링 설정 최적화 완료");
+    }
+  }, []);
 
   return (
     <div

@@ -1079,8 +1079,10 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
         backgroundColor: backgroundColor,
         allowTaint: true,
         useCORS: true,
-        scale: window.devicePixelRatio || 1,
+        scale: Math.max(window.devicePixelRatio || 1, 2), // 최소 2배 이상의 해상도로 설정
         logging: false,
+        letterRendering: true, // 텍스트 렌더링 품질 향상
+        foreignObjectRendering: true, // 텍스트 렌더링 품질 향상을 위한 옵션
         ignoreElements: (element) => {
           // 불필요한 요소 무시 (성능 향상)
           return (
@@ -1155,7 +1157,7 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
             const viewportData = activeCanvas.toDataURL({
               format: format,
               quality: 0.95,
-              multiplier: 1,
+              multiplier: Math.max(window.devicePixelRatio || 1, 2), // 최소 2배 이상의 해상도로 설정
               enableRetinaScaling: true,
             });
 

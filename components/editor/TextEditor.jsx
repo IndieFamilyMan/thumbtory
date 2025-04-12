@@ -170,13 +170,21 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
         lockScalingX: false,
         lockScalingY: false,
         hasRotatingPoint: true,
-        objectCaching: true,
+        objectCaching: false, // 이동 시 해상도 유지를 위해 캐싱 비활성화
         cornerColor: "#0084ff",
         borderColor: "#0084ff",
         padding: 10, // 패딩 증가
         originX: "left",
         originY: "top",
         splitByGrapheme: false, // 글자 단위 분할 비활성화
+        // 텍스트 렌더링 품질 개선 설정
+        noScaleCache: true,
+        statefullCache: true,
+        strokeUniform: true,
+        miterLimit: 10,
+        paintFirst: "fill",
+        shadow: null, // 그림자 효과 제거
+        textRendering: "optimizeLegibility", // 텍스트 렌더링 최적화
       });
 
       console.log("TextEditor: 스토어 메서드로 텍스트 객체 생성 완료", {
@@ -258,9 +266,9 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
         lockScalingY: false,
         lockUniScaling: false,
         hasRotatingPoint: true,
-        objectCaching: true,
+        objectCaching: false, // 이동 시 해상도 유지를 위해 캐싱 비활성화
         hoverCursor: "pointer",
-        moveCursor: "move",
+        moveCursor: "text",
         cornerColor: "#0084ff",
         borderColor: "#0084ff",
         cornerSize: 8,
@@ -276,6 +284,43 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
         lineHeight: 1.2, // 줄 높이
         minWidth: 20, // 최소 너비
         fixedWidth: true, // 너비 고정 - 자동 줄바꿈 보장
+        // 텍스트 렌더링 품질 개선 설정
+        cacheProperties: [
+          "fill",
+          "stroke",
+          "strokeWidth",
+          "width",
+          "height",
+          "strokeDashArray",
+          "strokeLineCap",
+          "strokeDashOffset",
+          "strokeLineJoin",
+          "strokeMiterLimit",
+          "fontSize",
+          "fontWeight",
+          "fontFamily",
+          "fontStyle",
+          "lineHeight",
+          "underline",
+          "overline",
+          "linethrough",
+          "textAlign",
+          "text",
+          "charSpacing",
+          "styles",
+          "direction",
+          "path",
+          "pathStartOffset",
+          "pathSide",
+        ],
+        noScaleCache: true, // 스케일링 시 캐시 사용 비활성화
+        // 텍스트 렌더링 안티앨리어싱 개선 설정
+        statefullCache: true,
+        strokeUniform: true,
+        miterLimit: 10, // 텍스트 모서리 부드럽게 처리
+        paintFirst: "fill",
+        shadow: null, // 그림자 효과 제거 (텍스트 선명도 향상)
+        textRendering: "optimizeLegibility", // 텍스트 렌더링 최적화
       });
 
       console.log("TextEditor: 새 텍스트 객체 생성 완료", {
@@ -315,6 +360,15 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
         lockMovementY: false,
         padding: 10, // 패딩 증가
         splitByGrapheme: false, // 글자 단위 분할 비활성화
+        // 텍스트 렌더링 품질 개선 설정
+        objectCaching: false, // 이동 시 해상도 유지를 위해 캐싱 비활성화
+        noScaleCache: true,
+        statefullCache: true,
+        strokeUniform: true,
+        miterLimit: 10,
+        paintFirst: "fill",
+        shadow: null, // 그림자 효과 제거
+        textRendering: "optimizeLegibility", // 텍스트 렌더링 최적화
       });
 
       // Automatically enter edit mode
