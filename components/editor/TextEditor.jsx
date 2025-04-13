@@ -3,8 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Textbox } from "fabric";
 import { useEditorStore } from "@/store/editor";
-import styles from "./TextEditor.module.css";
 import { Type, TextCursorInput } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
   const {
@@ -857,36 +857,49 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
   }, [localCanvas, onTextUpdated, saveState, updateElementProperty]);
 
   return (
-    <div className={`${styles["text-editor"]} ${className}`}>
-      <div className={`${styles.controls} flex flex-col`}>
+    <div className={cn("font-sans", className)}>
+      <div className="grid grid-cols-2 gap-6 mb-5 p-4 bg-gray-100 rounded-lg">
         <button
           onClick={handleAddText}
-          className="flex items-center gap-1 mb-2"
+          className="flex items-center justify-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors w-full"
         >
           <TextCursorInput className="h-4 w-4" />
           텍스트 추가
         </button>
-
-        <button onClick={handleClearCanvas}>캔버스 초기화</button>
+        <button
+          onClick={handleClearCanvas}
+          className="flex items-center justify-center px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors w-full"
+        >
+          캔버스 초기화
+        </button>
       </div>
 
-      <div className={styles["text-controls"]}>
-        <div>
-          <label htmlFor="text-content">텍스트:</label>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 p-6 bg-gray-100 rounded-lg">
+        {/* 텍스트 입력 */}
+        <div className="space-y-2.5 p-2">
+          <label htmlFor="text-content" className="text-sm font-medium block">
+            텍스트:
+          </label>
           <input
             type="text"
             id="text-content"
             value={text}
             onChange={handleTextChange}
             placeholder="텍스트 내용"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
-        <div>
-          <label htmlFor="font-family">글꼴:</label>
+
+        {/* 글꼴 선택 */}
+        <div className="space-y-2.5 p-2">
+          <label htmlFor="font-family" className="text-sm font-medium block">
+            글꼴:
+          </label>
           <select
             id="font-family"
             value={fontFamily}
             onChange={handleFontFamilyChange}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {fontFamilies.map((font) => (
               <option key={font} value={font}>
@@ -895,8 +908,12 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
             ))}
           </select>
         </div>
-        <div>
-          <label htmlFor="font-size">크기:</label>
+
+        {/* 글자 크기 */}
+        <div className="space-y-2.5 p-2">
+          <label htmlFor="font-size" className="text-sm font-medium block">
+            크기:
+          </label>
           <input
             type="number"
             id="font-size"
@@ -904,57 +921,100 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
             onChange={handleFontSizeChange}
             min="1"
             max="100"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
-        <div className={styles["color-picker"]}>
-          <label htmlFor="font-color">색상:</label>
+
+        {/* 텍스트 색상 */}
+        <div className="space-y-2.5 p-2">
+          <label htmlFor="font-color" className="text-sm font-medium block">
+            색상:
+          </label>
           <input
             type="color"
             id="font-color"
             value={fontColor}
             onChange={handleFontColorChange}
+            className="h-10 w-full cursor-pointer rounded-md border border-input"
           />
         </div>
-        <div>
-          <button
-            id="bold-text"
-            className={isBold ? styles.active : ""}
-            onClick={handleToggleBold}
-          >
-            굵게
-          </button>
-          <button
-            id="italic-text"
-            className={isItalic ? styles.active : ""}
-            onClick={handleToggleItalic}
-          >
-            기울임
-          </button>
-          <button
-            id="underline-text"
-            className={isUnderline ? styles.active : ""}
-            onClick={handleToggleUnderline}
-          >
-            밑줄
-          </button>
-        </div>
-        <div>
-          <label>정렬:</label>
-          <div className={styles["text-align-group"]}>
+
+        {/* 텍스트 스타일 */}
+        <div className="space-y-2.5 p-2">
+          <span className="text-sm font-medium block">스타일:</span>
+          <div className="flex gap-2 h-10">
             <button
-              className={textAlign === "left" ? styles.active : ""}
+              id="bold-text"
+              className={cn(
+                "px-3 border rounded-l-md flex-1 transition-colors flex items-center justify-center",
+                isBold
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+              onClick={handleToggleBold}
+            >
+              굵게
+            </button>
+            <button
+              id="italic-text"
+              className={cn(
+                "px-3 border flex-1 transition-colors flex items-center justify-center",
+                isItalic
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+              onClick={handleToggleItalic}
+            >
+              기울임
+            </button>
+            <button
+              id="underline-text"
+              className={cn(
+                "px-3 border rounded-r-md flex-1 transition-colors flex items-center justify-center",
+                isUnderline
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+              onClick={handleToggleUnderline}
+            >
+              밑줄
+            </button>
+          </div>
+        </div>
+
+        {/* 텍스트 정렬 */}
+        <div className="space-y-2.5 p-2">
+          <label className="text-sm font-medium block">정렬:</label>
+          <div className="flex gap-2 h-10">
+            <button
+              className={cn(
+                "px-3 border rounded-l-md flex-1 transition-colors flex items-center justify-center",
+                textAlign === "left"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
               onClick={() => handleTextAlignChange("left")}
             >
               좌측
             </button>
             <button
-              className={textAlign === "center" ? styles.active : ""}
+              className={cn(
+                "px-3 border flex-1 transition-colors flex items-center justify-center",
+                textAlign === "center"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
               onClick={() => handleTextAlignChange("center")}
             >
               중앙
             </button>
             <button
-              className={textAlign === "right" ? styles.active : ""}
+              className={cn(
+                "px-3 border rounded-r-md flex-1 transition-colors flex items-center justify-center",
+                textAlign === "right"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
               onClick={() => handleTextAlignChange("right")}
             >
               우측

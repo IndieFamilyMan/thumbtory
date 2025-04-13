@@ -1300,10 +1300,7 @@ export default function Canvas({
             borderRadius: "2px",
             pointerEvents: "none",
           }}
-        >
-          {width}x{height} ({activePlatformId}) - Scale:{" "}
-          {canvasScale.toFixed(2)}
-        </div>
+        ></div>
       )}
     </div>
   );

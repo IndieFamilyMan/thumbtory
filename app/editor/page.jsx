@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { DndContext } from "@dnd-kit/core";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import Link from "next/link";
-import { ChevronLeft, Save } from "lucide-react";
+import { House, FolderDot } from "lucide-react";
 import { SocialMediaLayouts } from "@/lib/social-media-layouts";
 import debounce from "lodash/debounce";
 
@@ -186,25 +186,21 @@ export default function EditorPage() {
     <div className="flex flex-col min-h-screen">
       <header className="flex items-center justify-between p-3 border-b">
         <Link href="/" className="flex items-center">
-          <ChevronLeft className="h-5 w-5 mr-1" />
-          돌아가기
+          <House className="h-5 w-5 mr-1" />
         </Link>
-        <h1 className="text-lg font-semibold">썸네일 에디터</h1>
+        <h1 className="text-lg font-semibold">썸토리</h1>
         <div className="flex items-center space-x-2">
           <button
             className="p-2 rounded-md hover:bg-muted"
             onClick={handleSaveTemplate}
           >
-            <Save className="h-5 w-5" />
+            <FolderDot className="h-5 w-5" />
           </button>
         </div>
       </header>
 
       {/* 모바일, 데스크탑 모두 동일한 수직 레이아웃 사용 */}
       <div className="flex flex-col flex-1 overflow-auto pb-16">
-        {/* 툴바 */}
-        <Toolbar />
-
         {/* 플랫폼 설정 */}
         <div className="p-6 border-b">
           <h2 className="font-medium text-lg mb-4">플랫폼 설정</h2>
@@ -278,24 +274,13 @@ export default function EditorPage() {
 
             <div className="flex items-center">
               <div className="ml-4 flex-1">
-                <p className="text-xs text-muted-foreground mt-2">
-                  이 플랫폼에 최적화된 크기의 이미지를 생성합니다. 캔버스와
-                  미리보기는 실제 출력 비율로 표시됩니다.
-                </p>
-                <div className="mt-3 flex items-center">
-                  <div className="text-xs font-medium">권장 크기: </div>
-                  <div className="ml-2 text-xs text-primary-foreground bg-primary px-2 py-0.5 rounded-full">
-                    {SocialMediaLayouts[activePlatformId]?.width} ×{" "}
-                    {SocialMediaLayouts[activePlatformId]?.height}
-                  </div>
-                </div>
+                <div className="mt-3 flex items-center"></div>
               </div>
             </div>
           </div>
         </div>
         {/* 이미지 편집 - 툴바 */}
         <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">이미지 편집</h2>
           <ToolbarLeft isMobileView={isMobile} />
         </div>
 
@@ -344,103 +329,12 @@ export default function EditorPage() {
         <Footer />
         {/* 텍스트 에디터 영역 */}
         <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">텍스트 에디터</h2>
           <TextEditor
             canvas={fabricCanvas}
             onTextUpdated={(textObject) => {
               console.log("텍스트 업데이트됨:", textObject?.text);
             }}
           />
-        </div>
-
-        {/* 플랫폼별 SEO 최적화 가이드 */}
-        <div className="mt-4 border-t pt-3">
-          <h4 className="text-xs font-medium mb-2">
-            플랫폼별 썸네일 최적화 가이드
-          </h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-muted/30">
-                  <th className="border border-border p-1 text-left">항목</th>
-                  <th className="border border-border p-1 text-left">
-                    네이버 블로그
-                  </th>
-                  <th className="border border-border p-1 text-left">
-                    티스토리
-                  </th>
-                  <th className="border border-border p-1 text-left">
-                    워드프레스
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="border border-border p-1 font-medium">
-                    최적 썸네일 사이즈
-                  </td>
-                  <td className="border border-border p-1">
-                    750 x 750 px 또는 1200 x 630 px
-                  </td>
-                  <td className="border border-border p-1">
-                    1200 x 675 px (16:9)
-                  </td>
-                  <td className="border border-border p-1">1200 x 628 px</td>
-                </tr>
-                <tr>
-                  <td className="border border-border p-1 font-medium">
-                    최대 권장 용량
-                  </td>
-                  <td className="border border-border p-1">
-                    3MB 이하 (2MB 권장)
-                  </td>
-                  <td className="border border-border p-1">3MB 이하</td>
-                  <td className="border border-border p-1">200KB~500KB 권장</td>
-                </tr>
-                <tr>
-                  <td className="border border-border p-1 font-medium">
-                    이미지 포맷
-                  </td>
-                  <td className="border border-border p-1">JPG, PNG</td>
-                  <td className="border border-border p-1">JPG, PNG, WEBP</td>
-                  <td className="border border-border p-1">
-                    JPG, PNG, WEBP (WEBP 권장)
-                  </td>
-                </tr>
-                <tr>
-                  <td className="border border-border p-1 font-medium">
-                    파일명
-                  </td>
-                  <td className="border border-border p-1 whitespace-nowrap">
-                    영어 + 키워드 포함
-                  </td>
-                  <td className="border border-border p-1 whitespace-nowrap">
-                    영어 + 키워드 포함
-                  </td>
-                  <td className="border border-border p-1 whitespace-nowrap">
-                    영어 + 키워드 포함
-                  </td>
-                </tr>
-                <tr>
-                  <td className="border border-border p-1 font-medium">
-                    ALT 태그
-                  </td>
-                  <td className="border border-border p-1">
-                    이미지 설명에 키워드 입력
-                  </td>
-                  <td className="border border-border p-1">
-                    &lt;img&gt; 삽입 시 직접 설정
-                  </td>
-                  <td className="border border-border p-1">직접 입력 필수</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            <span className="font-medium">📌 추가 팁:</span> WEBP 포맷은 로딩
-            속도가 빠르고 SEO에 유리합니다. 파일명과 ALT 텍스트에 주요 키워드를
-            포함하면 검색 엔진 노출에 도움이 됩니다.
-          </p>
         </div>
       </div>
     </div>

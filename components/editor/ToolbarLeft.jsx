@@ -23,19 +23,9 @@ export function ToolbarLeft({ isMobileView = false }) {
   } = useEditorStore();
   const imageInputRef = useRef(null);
   const backgroundImageInputRef = useRef(null);
-  const [showGuide, setShowGuide] = useState(true);
 
   // 선택된 요소 정보 추적
   const selectedElement = elements.find((el) => el.id === selectedElementId);
-
-  // 요소가 추가되면 가이드 메시지 숨기기
-  useEffect(() => {
-    if (elements.length > 0 || (background && background.type === "image")) {
-      setShowGuide(false);
-    } else {
-      setShowGuide(true);
-    }
-  }, [elements, background]);
 
   // 텍스트 요소 추가 핸들러
   const handleAddText = () => {
@@ -389,15 +379,6 @@ export function ToolbarLeft({ isMobileView = false }) {
 
   return (
     <aside className="w-full p-4 flex flex-col">
-      {/* 요소 추가 가이드 메시지 */}
-      {showGuide && (
-        <div className="mb-3 p-3 bg-primary/10 border border-primary/20 rounded-lg text-sm">
-          <p className="text-sm text-muted-foreground">
-            요소를 추가하여 디자인을 시작하세요
-          </p>
-        </div>
-      )}
-
       {/* 한 줄로 모든 버튼 표시 */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-nowrap w-full px-1 py-3 gap-3">

@@ -5,6 +5,7 @@ import { useEditorStore } from "@/store/editor";
 import { useToast } from "@/hooks/use-toast";
 import { PlatformPreview } from "./PlatformPreview";
 import { ExportModal } from "./ExportModal";
+import { Undo, Redo, ImageDown } from "lucide-react";
 
 export function Footer() {
   const { undo, redo, saveTemplate, platforms, seo, setSeo, background } =
@@ -187,75 +188,15 @@ export function Footer() {
 
   return (
     <div className="border-t border-border bg-muted/10">
-      <div className="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div className="container mx-auto px-4 py-4 flex flex-wrap items-center justify-center gap-4">
+        <div className="flex items-center gap-4 justify-center">
           <button
-            className="p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
-            onClick={undo}
-            title="실행 취소"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 7v6h6"></path>
-              <path d="M3 13c3.8-5 8.8-7 14-4"></path>
-            </svg>
-            <span className="hidden sm:inline">실행 취소</span>
-          </button>
-          <button
-            className="p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
-            onClick={redo}
-            title="다시 실행"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 7v6h-6"></path>
-              <path d="M21 13c-3.8-5-8.8-7-14-4"></path>
-            </svg>
-            <span className="hidden sm:inline">다시 실행</span>
-          </button>
-          <div className="h-6 border-r border-border mx-2 hidden sm:block"></div>
-        </div>
-
-        <div className="flex flex-grow justify-end items-center gap-4">
-          <button
-            className="p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
+            className="p-3 sm:p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
             onClick={handleShowExportModal}
-            title="파일 내보내기"
+            title="SEO 설정 및 이미지 다운로드"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            <span className="hidden sm:inline">내보내기</span>
+            <ImageDown className="w-10 h-10 sm:w-8 sm:h-8" />
+            SEO 설정 및 이미지 다운로드
           </button>
         </div>
       </div>
