@@ -167,8 +167,17 @@ export default function Canvas({
             canvas.freeDrawingBrush[property] = value;
           }
 
-          // 이전 drawing mode 상태로 복원
-          canvas.isDrawingMode = previousDrawingMode;
+          // 이전 drawing mode 상태로 복원 (중요: 항상 false로 설정)
+          canvas.isDrawingMode = previousDrawingMode === true ? true : false;
+
+          // 강제로 false로 설정하는 타이머 추가 (안전장치)
+          setTimeout(() => {
+            if (canvas && canvas.isDrawingMode === true) {
+              console.log("drawing mode 강제 비활성화 (안전장치)");
+              canvas.isDrawingMode = false;
+              canvas.renderAll();
+            }
+          }, 300);
         } catch (innerErr) {
           // 오류 발생해도 조용히 처리
           if (window.__BRUSH_INIT_ATTEMPTS__ <= 3) {
@@ -808,6 +817,9 @@ export default function Canvas({
       newCanvas.centeredScaling = true;
       newCanvas.centeredRotation = true;
 
+      // 명시적으로 drawing mode 비활성화
+      newCanvas.isDrawingMode = false;
+
       // 브러시 설정
       safeSetBrushProperty(newCanvas, "width", strokeWidth);
       safeSetBrushProperty(newCanvas, "color", strokeColor);
@@ -826,6 +838,15 @@ export default function Canvas({
       // 캔버스 상태 업데이트
       setCanvasReady(true);
       setIsMounted(true);
+
+      // 다시 한번 drawing mode 비활성화 확인 (안전장치)
+      setTimeout(() => {
+        if (newCanvas && newCanvas.isDrawingMode === true) {
+          console.log("drawing mode 강제 비활성화 (안전장치 2)");
+          newCanvas.isDrawingMode = false;
+          newCanvas.renderAll();
+        }
+      }, 500);
 
       // 콜백 실행
       if (onCanvasReady && typeof onCanvasReady === "function") {
@@ -987,8 +1008,34 @@ export default function Canvas({
     (canvas) => {
       if (!canvas) return;
 
+      // 명시적으로 selection과 selectable 설정
+      canvas.selection = true;
+      canvas.isDrawingMode = false;
+
+      // 객체 추가 이벤트 - 모든 객체가 선택 가능하도록 설정
+      canvas.on("object:added", (e) => {
+        if (!e.target) return;
+
+        // 객체의 selectable 속성 확인 및 설정
+        if (
+          e.target.selectable === false &&
+          !e.target.id?.startsWith("grid-")
+        ) {
+          console.log("객체 선택 가능하도록 속성 설정:", e.target.type);
+          e.target.selectable = true;
+          e.target.evented = true;
+          canvas.renderAll();
+        }
+      });
+
       // 마우스 이벤트
       canvas.on("mouse:down", (e) => {
+        // drawing 모드 확인 및 필요시 비활성화
+        if (canvas.isDrawingMode && !isDrawMode) {
+          console.log("마우스 이벤트에서 drawing mode 비활성화");
+          canvas.isDrawingMode = false;
+        }
+
         if (!e.target) return;
 
         console.log("Canvas: 객체 선택", e.target.type);
@@ -998,6 +1045,23 @@ export default function Canvas({
           canvas.bringObjectToFront(e.target);
           setSelectedElementId(e.target.id);
         }
+      });
+
+      // 객체 선택 이벤트
+      canvas.on("selection:created", (e) => {
+        if (!e.selected || !e.selected.length) return;
+
+        const selectedObj = e.selected[0];
+        console.log("객체 선택됨:", selectedObj.type);
+
+        if (selectedObj.id) {
+          setSelectedElementId(selectedObj.id);
+        }
+      });
+
+      // 객체 선택 해제 이벤트
+      canvas.on("selection:cleared", () => {
+        setSelectedElementId(null);
       });
 
       // 객체 수정 이벤트
@@ -1047,6 +1111,9 @@ export default function Canvas({
         if (setIsTextEditing) setIsTextEditing(true);
         if (onTextEdit) onTextEdit(true);
         if (setShowTextToolbar) setShowTextToolbar(true);
+
+        // 전역 플래그 설정
+        window.__EDITOR_TEXT_EDITING__ = true;
       });
 
       canvas.on("text:editing:exited", (e) => {
@@ -1056,9 +1123,21 @@ export default function Canvas({
         if (onTextEdit) onTextEdit(false);
         if (setShowTextToolbar) setShowTextToolbar(false);
 
+        // 전역 플래그 해제
+        window.__EDITOR_TEXT_EDITING__ = false;
+
         if (e.target.id) {
           updateElementProperty(e.target.id, "text", e.target.text);
           saveState();
+        }
+      });
+
+      // 마우스 아웃 시 isDrawingMode 체크 및 수정
+      canvas.on("mouse:out", () => {
+        if (canvas.isDrawingMode && !isDrawMode) {
+          console.log("마우스 아웃 시 drawing mode 비활성화");
+          canvas.isDrawingMode = false;
+          canvas.renderAll();
         }
       });
     },
@@ -1069,6 +1148,7 @@ export default function Canvas({
       setIsTextEditing,
       onTextEdit,
       setShowTextToolbar,
+      isDrawMode,
     ]
   );
 
@@ -1081,10 +1161,44 @@ export default function Canvas({
     // setTimeout으로 다음 렌더링 사이클에서 처리
     setTimeout(() => {
       if (fabricCanvasRef.current) {
+        // Drawing 모드 확인 및 비활성화
+        if (fabricCanvasRef.current.isDrawingMode === true) {
+          console.log("배경 적용 전 drawing mode 비활성화");
+          fabricCanvasRef.current.isDrawingMode = false;
+        }
+
         applyBackground(background, fabricCanvasRef.current);
       }
     }, 100);
   }, [background, canvasReady, applyBackground]);
+
+  // 요소 변경 감지 및 drawing 모드 확인
+  useEffect(() => {
+    if (!fabricCanvasRef.current || !canvasReady) return;
+
+    // 요소가 추가/변경될 때 drawing 모드 확인
+    if (fabricCanvasRef.current.isDrawingMode === true && !isDrawMode) {
+      console.log("요소 변경 시 drawing mode 비활성화");
+      fabricCanvasRef.current.isDrawingMode = false;
+
+      // canvas.selection이 false인 경우도 확인
+      if (fabricCanvasRef.current.selection === false) {
+        console.log("요소 변경 시 selection 활성화");
+        fabricCanvasRef.current.selection = true;
+      }
+
+      // 캔버스 내 객체들의 selectable 속성 확인 및 수정
+      fabricCanvasRef.current.getObjects().forEach((obj) => {
+        if (obj.selectable === false && !obj.id?.startsWith("grid-")) {
+          console.log("객체 선택 가능하도록 속성 재설정:", obj.type);
+          obj.selectable = true;
+          obj.evented = true;
+        }
+      });
+
+      fabricCanvasRef.current.renderAll();
+    }
+  }, [elements, canvasReady, isDrawMode]);
 
   // 캔버스 UI 렌더링
   return (
