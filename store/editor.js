@@ -353,10 +353,43 @@ export const useEditorStore = create((set, get) => ({
 
   removeElement: (id) => {
     get().saveToHistory(() => {
-      const { elements } = get();
+      const { elements, canvas } = get();
+
+      // 1. Zustand 스토어에서 요소 제거
       set({
         elements: elements.filter((e) => e.id !== id),
+        // 만약 현재 선택된 요소가 삭제되는 요소라면 선택 해제
+        selectedElementId:
+          get().selectedElementId === id ? null : get().selectedElementId,
+        selectedElement:
+          get().selectedElementId === id ? null : get().selectedElement,
       });
+
+      // 2. Fabric.js 캔버스에서도 요소 제거
+      try {
+        // 캔버스 참조 가져오기 - 여러 방법으로 시도
+        const fabricCanvas =
+          canvas ||
+          window.fabricCanvasInstance ||
+          document.__EDITOR_FABRIC_CANVAS__;
+
+        if (fabricCanvas) {
+          // ID로 객체 찾기
+          const objectToRemove = fabricCanvas
+            .getObjects()
+            .find((obj) => obj.id === id);
+
+          if (objectToRemove) {
+            // 객체 제거
+            fabricCanvas.remove(objectToRemove);
+            // 캔버스 렌더링 갱신
+            fabricCanvas.requestRenderAll();
+            console.log(`캔버스에서 요소 제거 완료: ${id}`);
+          }
+        }
+      } catch (error) {
+        console.error("캔버스에서 요소 제거 중 오류:", error);
+      }
     });
   },
 
