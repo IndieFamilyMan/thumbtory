@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRef, useState, useEffect } from "react";
 import { useEditorStore } from "@/store/editor";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { TextOptions } from "./TextOptions";
 
 export function ToolbarLeft({ isMobileView = false }) {
@@ -377,6 +377,34 @@ export function ToolbarLeft({ isMobileView = false }) {
     });
   };
 
+  // 요소를 위로 이동 핸들러 (시각적으로 위로 = z-index 증가 = 배열에서는 앞으로)
+  const handleMoveElementUp = () => {
+    if (selectedElementId) {
+      useEditorStore.getState().moveElementDown(selectedElementId);
+    }
+  };
+
+  // 요소를 아래로 이동 핸들러 (시각적으로 아래로 = z-index 감소 = 배열에서는 뒤로)
+  const handleMoveElementDown = () => {
+    if (selectedElementId) {
+      useEditorStore.getState().moveElementUp(selectedElementId);
+    }
+  };
+
+  // 요소가 맨 위인지 확인 (z-index 기준에서는 배열의 끝)
+  const isElementAtTop = () => {
+    if (!selectedElementId) return false;
+    const index = elements.findIndex((e) => e.id === selectedElementId);
+    return index === elements.length - 1;
+  };
+
+  // 요소가 맨 아래인지 확인 (z-index 기준에서는 배열의 시작)
+  const isElementAtBottom = () => {
+    if (!selectedElementId) return false;
+    const index = elements.findIndex((e) => e.id === selectedElementId);
+    return index === 0;
+  };
+
   return (
     <aside className="w-full p-4 flex flex-col">
       {/* 한 줄로 모든 버튼 표시 */}
@@ -441,21 +469,43 @@ export function ToolbarLeft({ isMobileView = false }) {
           </button>
         </div>
 
-        {/* 삭제 버튼을 별도 행에 배치 - 전체 너비로 확장 */}
+        {/* 선택된 요소 컨트롤 버튼들 */}
         {selectedElementId && (
           <div className="w-full px-1">
-            <Button
-              variant="destructive"
-              className="w-full flex items-center justify-center gap-2 py-2"
-              onClick={() => {
-                removeElement(selectedElementId);
-                setSelectedElementId(null);
-              }}
-              title="선택된 요소 삭제"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span>선택한 요소 삭제</span>
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1 flex items-center justify-center gap-1 py-2"
+                onClick={handleMoveElementUp}
+                disabled={isElementAtTop()}
+                title="선택한 요소를 위로 이동"
+              >
+                <ChevronUp className="h-4 w-4" />
+                <span>위로</span>
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1 flex items-center justify-center gap-1 py-2"
+                onClick={handleMoveElementDown}
+                disabled={isElementAtBottom()}
+                title="선택한 요소를 아래로 이동"
+              >
+                <ChevronDown className="h-4 w-4" />
+                <span>아래로</span>
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1 flex items-center justify-center gap-1 py-2"
+                onClick={() => {
+                  removeElement(selectedElementId);
+                  setSelectedElementId(null);
+                }}
+                title="선택된 요소 삭제"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>삭제</span>
+              </Button>
+            </div>
           </div>
         )}
       </div>

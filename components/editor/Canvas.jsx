@@ -1269,7 +1269,79 @@ export default function Canvas({
         }
       });
     }
+
+    // 요소 순서 동기화
+    syncElementsOrder();
   }, [elements, canvasReady]);
+
+  // 요소 순서 동기화 함수
+  const syncElementsOrder = () => {
+    if (!fabricCanvasRef.current || !canvasReady) return;
+
+    try {
+      const canvas = fabricCanvasRef.current;
+
+      // 스토어에서 현재 요소 목록 가져오기
+      const { elements } = useEditorStore.getState();
+
+      // 요소가 없으면 처리하지 않음
+      if (!elements || elements.length === 0) return;
+
+      // 캔버스 객체 중 요소 ID가 있는 것만 필터링
+      const validObjects = canvas.getObjects().filter((obj) => obj.id);
+
+      // 매핑: 요소 ID에 대한 인덱스 저장
+      const elementIndexMap = {};
+      elements.forEach((element, index) => {
+        if (element.id) {
+          elementIndexMap[element.id] = index;
+        }
+      });
+
+      // 모든 객체를 Z-index 기준으로 재정렬
+      // elements 배열의 인덱스가 낮을수록 아래에 위치 (먼저 그려짐)
+      const sortedObjects = [...validObjects].sort((a, b) => {
+        const aIndex =
+          elementIndexMap[a.id] !== undefined ? elementIndexMap[a.id] : -1;
+        const bIndex =
+          elementIndexMap[b.id] !== undefined ? elementIndexMap[b.id] : -1;
+        return aIndex - bIndex;
+      });
+
+      // 현재 선택된 객체의 ID를 저장 (있는 경우)
+      const activeObject = canvas.getActiveObject();
+      const activeObjectId = activeObject ? activeObject.id : null;
+
+      // 먼저 캔버스에서 선택 해제
+      canvas.discardActiveObject();
+
+      // 모든 오브젝트를 캔버스에서 제거 (배경 설정은 유지됨)
+      validObjects.forEach((obj) => {
+        canvas.remove(obj);
+      });
+
+      // 정렬된 순서대로 다시 객체 추가
+      sortedObjects.forEach((obj) => {
+        canvas.add(obj);
+      });
+
+      // 선택 상태 복원 (ID 기반으로 새로 추가된 객체를 찾음)
+      if (activeObjectId) {
+        const newObjects = canvas.getObjects();
+        const objectToSelect = newObjects.find(
+          (obj) => obj.id === activeObjectId
+        );
+        if (objectToSelect) {
+          canvas.setActiveObject(objectToSelect);
+        }
+      }
+
+      // 변경사항 반영
+      canvas.requestRenderAll();
+    } catch (error) {
+      console.error("요소 순서 동기화 중 오류:", error);
+    }
+  };
 
   // 화면 크기에 따라 모바일 여부 감지
   useEffect(() => {

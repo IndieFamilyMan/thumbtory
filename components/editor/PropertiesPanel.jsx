@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useEditorStore } from "@/store/editor";
 import { PlatformSelector } from "./PlatformSelector";
+import { ChevronUp, ChevronDown, Trash2 } from "lucide-react";
 
 export function PropertiesPanel({ isMobileView = false }) {
   const {
@@ -86,9 +87,47 @@ export function PropertiesPanel({ isMobileView = false }) {
 
   // 요소 삭제 핸들러
   const handleDeleteElement = () => {
-    if (selectedElement) {
-      removeElement(selectedElement.id);
-    }
+    removeElement(selectedElement.id);
+  };
+
+  const handleMoveElementUp = () => {
+    useEditorStore.getState().moveElementUp(selectedElement.id);
+  };
+
+  const handleMoveElementDown = () => {
+    useEditorStore.getState().moveElementDown(selectedElement.id);
+  };
+
+  // 요소가 맨 위인지 확인
+  const isElementAtTop = () => {
+    if (!selectedElement) return false;
+    const elements = useEditorStore.getState().elements;
+    const index = elements.findIndex((e) => e.id === selectedElement.id);
+    return index === 0;
+  };
+
+  // 요소가 맨 아래인지 확인
+  const isElementAtBottom = () => {
+    if (!selectedElement) return false;
+    const elements = useEditorStore.getState().elements;
+    const index = elements.findIndex((e) => e.id === selectedElement.id);
+    return index === elements.length - 1;
+  };
+
+  // 요소의 현재 순서 정보 텍스트 생성
+  const getElementOrderInfo = () => {
+    if (!selectedElement) return "";
+
+    const elements = useEditorStore.getState().elements;
+    const index = elements.findIndex((e) => e.id === selectedElement.id);
+    const total = elements.length;
+
+    if (index === -1) return "";
+
+    // 순서는 1부터 시작하도록 표시 (사용자에게 친숙하게)
+    return `레이어 ${total - index}/${total} (${
+      index === 0 ? "맨 위" : index === total - 1 ? "맨 아래" : "중간"
+    })`;
   };
 
   // 텍스트 요소 속성 패널 렌더링
@@ -504,12 +543,34 @@ export function PropertiesPanel({ isMobileView = false }) {
           {selectedElement.type === "image" && renderImageProperties()}
           {selectedElement.type === "shape" && renderShapeProperties()}
           <div className="mt-4">
-            <button
-              className="w-full px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm hover:bg-destructive/90 transition-colors"
-              onClick={handleDeleteElement}
-            >
-              요소 삭제
-            </button>
+            <div className="text-center mb-2 text-xs text-muted-foreground">
+              {getElementOrderInfo()}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm flex items-center justify-center"
+                onClick={handleMoveElementUp}
+                title="위로 이동"
+              >
+                <ChevronUp className="w-4 h-4 mr-1" />
+                위로
+              </button>
+              <button
+                className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm flex items-center justify-center"
+                onClick={handleMoveElementDown}
+                title="아래로 이동"
+              >
+                <ChevronDown className="w-4 h-4 mr-1" />
+                아래로
+              </button>
+              <button
+                className="w-full px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm flex items-center justify-center"
+                onClick={handleDeleteElement}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                삭제
+              </button>
+            </div>
           </div>
         </div>
       )}

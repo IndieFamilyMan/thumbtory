@@ -403,6 +403,68 @@ export const useEditorStore = create((set, get) => ({
     });
   },
 
+  // 요소를 위로 이동 (시각적으로 위로 = z-index 증가 = 배열에서는 뒤로)
+  moveElementUp: (id) => {
+    get().saveToHistory(() => {
+      const { elements } = get();
+      const index = elements.findIndex((e) => e.id === id);
+
+      // 이미 맨 위에 있으면 아무것도 하지 않음
+      if (index <= 0) return;
+
+      // 요소 순서 변경
+      const newElements = [...elements];
+      const temp = newElements[index];
+      newElements[index] = newElements[index - 1];
+      newElements[index - 1] = temp;
+
+      // 캔버스에서도 순서 반영
+      try {
+        const canvas = window.fabricCanvasInstance;
+        if (canvas) {
+          // 캔버스 업데이트는 요소 배열을 설정한 후에 Canvas 컴포넌트의
+          // syncElementsOrder 함수에서 처리됨
+          canvas.requestRenderAll();
+        }
+      } catch (error) {
+        console.error("캔버스에서 요소 순서 변경 중 오류:", error);
+      }
+
+      set({ elements: newElements });
+    });
+  },
+
+  // 요소를 아래로 이동 (시각적으로 아래로 = z-index 감소 = 배열에서는 앞으로)
+  moveElementDown: (id) => {
+    get().saveToHistory(() => {
+      const { elements } = get();
+      const index = elements.findIndex((e) => e.id === id);
+
+      // 이미 맨 아래에 있으면 아무것도 하지 않음
+      if (index === -1 || index >= elements.length - 1) return;
+
+      // 요소 순서 변경
+      const newElements = [...elements];
+      const temp = newElements[index];
+      newElements[index] = newElements[index + 1];
+      newElements[index + 1] = temp;
+
+      // 캔버스에서도 순서 반영
+      try {
+        const canvas = window.fabricCanvasInstance;
+        if (canvas) {
+          // 캔버스 업데이트는 요소 배열을 설정한 후에 Canvas 컴포넌트의
+          // syncElementsOrder 함수에서 처리됨
+          canvas.requestRenderAll();
+        }
+      } catch (error) {
+        console.error("캔버스에서 요소 순서 변경 중 오류:", error);
+      }
+
+      set({ elements: newElements });
+    });
+  },
+
   clearSelection: () => {
     const { elements } = get();
     set({
