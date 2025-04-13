@@ -1202,6 +1202,75 @@ export default function Canvas({
     }
   }, [elements, canvasReady, isDrawMode]);
 
+  // 요소와 캔버스 객체 동기화 (추가된 요소를 캔버스에 렌더링)
+  useEffect(() => {
+    if (!fabricCanvasRef.current || !canvasReady) return;
+
+    // 현재 캔버스의 객체 ID 목록
+    const canvasObjectIds = fabricCanvasRef.current
+      .getObjects()
+      .map((obj) => obj.id)
+      .filter(Boolean);
+
+    // elements 배열에 있지만 캔버스에 없는 요소들 찾기
+    const newElements = elements.filter(
+      (el) => el.id && !canvasObjectIds.includes(el.id)
+    );
+
+    if (newElements.length > 0) {
+      console.log(`캔버스에 추가할 새 요소: ${newElements.length}개`);
+
+      // 새 요소들을 캔버스에 추가
+      newElements.forEach((element) => {
+        try {
+          if (element.type === "image" && element.src) {
+            // 이미지 요소 추가
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+
+            img.onload = () => {
+              // Fabric Image 객체 생성
+              const fabricImage = new FabricImage(img);
+
+              // 요소 속성 설정
+              fabricImage.set({
+                id: element.id,
+                left: element.x,
+                top: element.y,
+                scaleX: element.scaleX || 1,
+                scaleY: element.scaleY || 1,
+                angle: element.rotation || 0,
+                opacity: element.opacity || 1,
+                selectable: true,
+                evented: true,
+              });
+
+              // 캔버스에 이미지 추가
+              fabricCanvasRef.current.add(fabricImage);
+              fabricCanvasRef.current.renderAll();
+              console.log("이미지 요소가 캔버스에 추가됨:", element.id);
+            };
+
+            img.onerror = (error) => {
+              console.error("이미지 로드 실패:", error);
+            };
+
+            // 이미지 로드 시작
+            img.src = element.src;
+          } else if (element.type === "text") {
+            // 텍스트 요소는 기존 로직에서 처리됨
+          } else if (element.type === "shape") {
+            // 도형 요소는 기존 로직에서 처리됨
+          } else if (element.type === "icon") {
+            // 아이콘 요소는 기존 로직에서 처리됨
+          }
+        } catch (error) {
+          console.error(`요소 추가 중 오류 (${element.type}):`, error);
+        }
+      });
+    }
+  }, [elements, canvasReady]);
+
   // 화면 크기에 따라 모바일 여부 감지
   useEffect(() => {
     const checkMobile = () => {
