@@ -15,6 +15,8 @@ import { DndContext } from "@dnd-kit/core";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import Link from "next/link";
 import { ChevronLeft, Save } from "lucide-react";
+import { SocialMediaLayouts } from "@/lib/social-media-layouts";
+import debounce from "lodash/debounce";
 
 export default function EditorPage() {
   const [isMobile, setIsMobile] = useState(false);
@@ -31,6 +33,8 @@ export default function EditorPage() {
     setMobileLeftOpen,
     platforms,
     togglePlatform,
+    activePlatformId,
+    setActivePlatform,
     mobileRightOpen,
     showPlatformPreview,
     setMobileRightOpen,
@@ -157,6 +161,26 @@ export default function EditorPage() {
     }
   }, []);
 
+  // 플랫폼 변경 처리를 위한 debounce 함수 - 연속 호출 방지
+  const debouncedPlatformChange = useRef(
+    debounce((newPlatformId) => {
+      if (!SocialMediaLayouts[newPlatformId]) {
+        console.warn("유효하지 않은 플랫폼 ID:", newPlatformId);
+        return;
+      }
+
+      console.log("플랫폼 변경 시작(debounced):", newPlatformId);
+      setActivePlatform(newPlatformId);
+    }, 300)
+  ).current;
+
+  // 컴포넌트 언마운트 시 디바운스 함수 취소
+  useEffect(() => {
+    return () => {
+      debouncedPlatformChange.cancel();
+    };
+  }, [debouncedPlatformChange]);
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="flex items-center justify-between p-3 border-b">
@@ -183,26 +207,89 @@ export default function EditorPage() {
         {/* 플랫폼 설정 */}
         <div className="p-6 border-b">
           <h2 className="font-medium text-lg mb-4">플랫폼 설정</h2>
-          <div className="flex flex-wrap gap-3 mb-4">
-            {platforms.map((platform) => (
-              <div key={platform.id} className="flex items-center py-2 mr-6">
-                <input
-                  type="checkbox"
-                  id={`platform-${platform.id}`}
-                  checked={platform.enabled}
-                  onChange={(e) =>
-                    togglePlatform(platform.id, e.target.checked)
-                  }
-                  className="mr-3 w-4 h-4"
-                />
-                <label
-                  htmlFor={`platform-${platform.id}`}
-                  className="text-sm cursor-pointer"
+          <div className="flex flex-col">
+            <div className="relative w-full max-w-md mb-4">
+              <div className="relative">
+                <select
+                  className="appearance-none block w-full bg-background border border-border rounded-md py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  value={activePlatformId}
+                  onChange={(e) => {
+                    try {
+                      // 플랫폼 변경 전 확인
+                      const newPlatformId = e.target.value;
+                      debouncedPlatformChange(newPlatformId);
+                    } catch (err) {
+                      // 오류가 발생해도 사용자에게 노출되지 않도록 처리
+                      console.warn(
+                        "플랫폼 변경 중 오류 발생 (무시됨):",
+                        err.message
+                      );
+                    }
+                  }}
                 >
-                  {platform.name} ({platform.width}×{platform.height})
-                </label>
+                  {Object.entries(SocialMediaLayouts).map(([id, platform]) => (
+                    <option key={id} value={id}>
+                      {id === "naver"
+                        ? "네이버 블로그"
+                        : id === "tistory"
+                        ? "티스토리"
+                        : id === "wordpress"
+                        ? "워드프레스"
+                        : id === "brunch"
+                        ? "브런치"
+                        : id === "instagram"
+                        ? "인스타그램 게시물"
+                        : id === "instagram_story"
+                        ? "인스타그램 스토리"
+                        : id === "facebook"
+                        ? "페이스북"
+                        : id === "twitter"
+                        ? "트위터(X)"
+                        : id === "youtube"
+                        ? "유튜브"
+                        : id === "linkedin"
+                        ? "링크드인"
+                        : id === "custom"
+                        ? "사용자 지정"
+                        : id}
+                      ({platform.width}×{platform.height})
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                  <svg
+                    className="w-5 h-5 text-muted-foreground"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M19 9l-7 7-7-7"
+                    ></path>
+                  </svg>
+                </div>
               </div>
-            ))}
+            </div>
+
+            <div className="flex items-center">
+              <div className="ml-4 flex-1">
+                <p className="text-xs text-muted-foreground mt-2">
+                  이 플랫폼에 최적화된 크기의 이미지를 생성합니다. 캔버스와
+                  미리보기는 실제 출력 비율로 표시됩니다.
+                </p>
+                <div className="mt-3 flex items-center">
+                  <div className="text-xs font-medium">권장 크기: </div>
+                  <div className="ml-2 text-xs text-primary-foreground bg-primary px-2 py-0.5 rounded-full">
+                    {SocialMediaLayouts[activePlatformId]?.width} ×{" "}
+                    {SocialMediaLayouts[activePlatformId]?.height}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         {/* 이미지 편집 - 툴바 */}
@@ -213,20 +300,53 @@ export default function EditorPage() {
 
         {/* 텍스트, 요소 - 캔버스 */}
         <div className="p-6 border-b">
+          <h2 className="font-medium text-lg mb-4">캔버스</h2>
           <div
-            className="aspect-video flex items-center justify-center"
-            style={{ height: "300px" }}
+            className="flex items-center justify-center bg-muted/20 rounded-md p-4"
+            style={{
+              height: "500px",
+              maxWidth: "100%",
+              overflow: "hidden",
+            }}
           >
-            <Canvas
-              setCanvasRef={setCanvasRef}
-              setShowTextToolbar={() => {}}
-              onTextEdit={() => {}}
-              setIsTextEditing={() => {}}
-              onCanvasReady={(canvasInstance) => {
-                setFabricCanvas(canvasInstance);
-                console.log("캔버스가 준비되었습니다.");
+            <div
+              className="canvas-container w-full h-full flex items-center justify-center overflow-hidden"
+              style={{
+                maxHeight: "100%",
+                maxWidth: "100%",
+                position: "relative",
+                boxShadow:
+                  "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                borderRadius: "0.375rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f8f9fa",
               }}
-            />
+            >
+              <Canvas
+                setCanvasRef={setCanvasRef}
+                setShowTextToolbar={() => {}}
+                onTextEdit={() => {}}
+                setIsTextEditing={() => {}}
+                onCanvasReady={(canvasInstance) => {
+                  setFabricCanvas(canvasInstance);
+                  console.log("캔버스가 준비되었습니다.");
+                }}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              현재 플랫폼:{" "}
+              {Object.entries(SocialMediaLayouts).find(
+                ([id]) => id === activePlatformId
+              )?.[1]?.description || "선택된 플랫폼 없음"}
+            </div>
+            <div className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
+              {SocialMediaLayouts[activePlatformId]?.width || 0} ×{" "}
+              {SocialMediaLayouts[activePlatformId]?.height || 0}
+            </div>
           </div>
         </div>
 

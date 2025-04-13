@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { SocialMediaLayouts } from "@/lib/social-media-layouts";
 
 // 지원하는 플랫폼 및 크기 정의
 // 캔버스 요소 유형
@@ -213,7 +214,68 @@ export const useEditorStore = create((set, get) => ({
     });
   },
 
-  setActivePlatform: (id) => set({ activePlatformId: id }),
+  // 플랫폼 변경
+  setActivePlatform: (platformId) => {
+    console.log("플랫폼 변경:", platformId);
+
+    // 유효한 플랫폼 ID 확인
+    const isValidPlatform =
+      Object.keys(SocialMediaLayouts).includes(platformId);
+    if (!isValidPlatform) {
+      console.log("잘못된 플랫폼 ID, 기본값으로 설정:", platformId);
+      platformId = "instagram"; // 기본 플랫폼
+    }
+
+    // 캔버스 인스턴스 확인
+    const canvas = get().canvas;
+
+    // 플랫폼 ID가 변경되지 않았으면 무시
+    if (get().activePlatformId === platformId) {
+      console.log("동일한 플랫폼으로의 변경 요청 무시:", platformId);
+      return;
+    }
+
+    // 플랫폼 데이터 가져오기
+    const platformData = SocialMediaLayouts[platformId];
+    const { width, height } = platformData;
+
+    // 상태 업데이트 - 캔버스 없어도 상태는 업데이트
+    set({ activePlatformId: platformId });
+
+    // 캔버스가 정의되지 않은 경우 처리
+    if (!canvas) {
+      console.log("캔버스 인스턴스가 없습니다. 플랫폼만 변경합니다.");
+      return;
+    }
+
+    try {
+      // 캔버스 크기 변경
+      canvas.setWidth(width);
+      canvas.setHeight(height);
+
+      // 요소들의 위치 조정
+      const elements = get().elements;
+      const updatedElements = elements.map((el) => {
+        // 텍스트 또는 이미지 요소의 위치 조정 로직
+        // 중앙 위치에 놓이도록 조정
+        const newEl = { ...el };
+
+        // 요소 위치 보정이 필요한 경우 추가할 수 있음
+
+        return newEl;
+      });
+
+      // 업데이트된 요소들 저장
+      set({ elements: updatedElements });
+
+      // 캔버스 다시 그리기
+      canvas.renderAll();
+
+      console.log("플랫폼 변경 완료:", { platformId, width, height });
+    } catch (error) {
+      console.log("플랫폼 변경 중 오류(무시됨):", error);
+    }
+  },
 
   // 요소 관리
   addElement: (elementData) => {
@@ -447,5 +509,44 @@ export const useEditorStore = create((set, get) => ({
     }, 100);
 
     return newTextElement;
+  },
+
+  // 배경 이미지 설정
+  setBackgroundFromImage: (file) => {
+    if (!file) return;
+
+    try {
+      const url = URL.createObjectURL(file);
+
+      // 배경 객체 구조 명확하게 설정
+      set({
+        background: {
+          type: "image",
+          url: url,
+          file: file,
+          filename: file.name,
+          size: file.size,
+        },
+      });
+
+      console.log("배경 이미지 설정됨:", file.name, url);
+    } catch (error) {
+      console.error("배경 이미지 설정 오류:", error);
+    }
+  },
+
+  // 배경 색상 설정
+  setBackgroundColor: (color) => {
+    if (!color) return;
+
+    // 배경 객체 구조 명확하게 설정
+    set({
+      background: {
+        type: "color",
+        value: color,
+      },
+    });
+
+    console.log("배경 색상 설정됨:", color);
   },
 }));

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useEditorStore } from "@/store/editor";
+import { PlatformSelector } from "./PlatformSelector";
 
 export function PropertiesPanel({ isMobileView = false }) {
   const {
@@ -430,268 +431,88 @@ export function PropertiesPanel({ isMobileView = false }) {
   };
 
   return (
-    <aside
-      className={`${
+    <div
+      className={`bg-card p-4 ${
         isMobileView
-          ? "w-full p-2 bg-background"
-          : "w-[300px] border-l p-4 flex flex-col h-[calc(100vh-57px)] overflow-y-auto md:static absolute right-0 bg-background z-10 transition-transform transform sm:transform-none"
+          ? "w-full h-full overflow-y-auto"
+          : "h-full border-l overflow-y-auto"
       }`}
     >
-      {selectedElement ? (
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-medium text-lg">요소 속성</h2>
-            <button
-              className="p-1 rounded-md hover:bg-muted"
-              onClick={handleDeleteElement}
-              title="요소 삭제"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 6h18"></path>
-                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-              </svg>
-            </button>
-          </div>
+      <PlatformSelector />
 
-          {/* 요소 타입별 속성 패널 */}
-          {renderTextProperties()}
-          {renderImageProperties()}
-          {renderShapeProperties()}
-          {/* 아이콘 요소 속성 패널은 필요 시 추가 */}
+      <div className="mb-4">
+        <h3 className="font-medium mb-2">일반 속성</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm block mb-1">파일명</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm"
+              value={seo.filename}
+              onChange={handleFilenameChange}
+              placeholder="파일명을 입력하세요"
+            />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">키워드</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm"
+              value={seo.keywords?.join(", ")}
+              onChange={handleKeywordsChange}
+              placeholder="키워드를 쉼표로 구분하여 입력하세요"
+            />
+          </div>
         </div>
-      ) : (
-        <div>
-          <h2 className="font-medium text-lg mb-4">디자인 설정</h2>
+      </div>
 
-          <div className="bg-muted/20 rounded-lg p-4 mb-6 border border-border">
-            <h3 className="font-medium text-sm mb-3 flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mr-2"
-              >
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                <path d="M3 9h18" />
-              </svg>
-              배경 설정
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm block mb-2 text-muted-foreground">
-                  배경 색상 선택
-                </label>
-                <div className="flex gap-2 mb-2">
-                  <button
-                    className={`w-8 h-8 rounded-full border-2 ${
-                      background.type === "color" &&
-                      background.value === "#ffffff"
-                        ? "border-primary"
-                        : "border-border"
-                    }`}
-                    style={{ background: "#ffffff" }}
-                    onClick={() => handleBackgroundColorChange("#ffffff")}
-                  />
-                  <button
-                    className={`w-8 h-8 rounded-full border-2 ${
-                      background.type === "color" &&
-                      background.value === "#f8f9fa"
-                        ? "border-primary"
-                        : "border-border"
-                    }`}
-                    style={{ background: "#f8f9fa" }}
-                    onClick={() => handleBackgroundColorChange("#f8f9fa")}
-                  />
-                  <button
-                    className={`w-8 h-8 rounded-full border-2 ${
-                      background.type === "color" &&
-                      background.value === "#212529"
-                        ? "border-primary"
-                        : "border-border"
-                    }`}
-                    style={{ background: "#212529" }}
-                    onClick={() => handleBackgroundColorChange("#212529")}
-                  />
-                  <button
-                    className={`w-8 h-8 rounded-full border-2 ${
-                      background.type === "color" &&
-                      background.value === "#0d6efd"
-                        ? "border-primary"
-                        : "border-border"
-                    }`}
-                    style={{ background: "#0d6efd" }}
-                    onClick={() => handleBackgroundColorChange("#0d6efd")}
-                  />
-                  <button
-                    className={`w-8 h-8 rounded-full border-2 ${
-                      background.type === "color" &&
-                      background.value === "#dc3545"
-                        ? "border-primary"
-                        : "border-border"
-                    }`}
-                    style={{ background: "#dc3545" }}
-                    onClick={() => handleBackgroundColorChange("#dc3545")}
-                  />
-                </div>
-                <input
-                  type="color"
-                  className="w-full h-10 p-1 rounded-md border cursor-pointer"
-                  value={
-                    background.type === "color" ? background.value : "#ffffff"
-                  }
-                  onChange={(e) => handleBackgroundColorChange(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm text-muted-foreground">
-                    배경 이미지
-                  </label>
-                  {background.type === "image" && (
-                    <button
-                      className="text-xs text-red-500 hover:underline"
-                      onClick={() =>
-                        setBackground({ type: "color", value: "#ffffff" })
-                      }
-                    >
-                      제거
-                    </button>
-                  )}
-                </div>
-
-                {background.type === "image" ? (
-                  <div className="relative rounded-lg overflow-hidden mb-2 border">
-                    <img
-                      src={background.value}
-                      alt="배경 이미지"
-                      className="w-full h-40 object-cover"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
-                      <button
-                        className="px-3 py-1 bg-white text-black rounded-md text-sm shadow-md"
-                        onClick={handleImageUploadClick}
-                      >
-                        변경
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    className="w-full h-40 border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-muted/30 transition-colors"
-                    onClick={handleImageUploadClick}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="mb-2"
-                    >
-                      <rect
-                        x="3"
-                        y="3"
-                        width="18"
-                        height="18"
-                        rx="2"
-                        ry="2"
-                      ></rect>
-                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                      <polyline points="21 15 16 10 5 21"></polyline>
-                    </svg>
-                    <span className="text-sm font-medium">이미지 업로드</span>
-                    <span className="text-xs mt-1">
-                      또는 여기에 이미지를 끌어다 놓으세요
-                    </span>
-                  </button>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                />
-              </div>
-            </div>
+      <div className="mb-4">
+        <h3 className="font-medium mb-2">배경</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm block mb-1">배경 색상</label>
+            <input
+              type="color"
+              className="w-full"
+              value={background.type === "color" ? background.value : "#ffffff"}
+              onChange={(e) => handleBackgroundColorChange(e.target.value)}
+            />
           </div>
+          <div>
+            <label className="text-sm block mb-1">배경 이미지</label>
+            <button
+              className="w-full px-3 py-2 border rounded-md text-sm hover:bg-muted transition-colors"
+              onClick={handleImageUploadClick}
+            >
+              이미지 업로드
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={handleImageUpload}
+            />
+          </div>
+        </div>
+      </div>
 
-          <div className="bg-muted/20 rounded-lg p-4 border border-border">
-            <h3 className="font-medium text-sm mb-3 flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mr-2"
-              >
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-                <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              </svg>
-              SEO 최적화
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm block mb-1 text-muted-foreground">
-                  파일명
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                  placeholder="예: my-blog-thumbnail"
-                  value={seo.filename || ""}
-                  onChange={handleFilenameChange}
-                />
-              </div>
-              <div>
-                <label className="text-sm block mb-1 text-muted-foreground">
-                  키워드 (쉼표로 구분)
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                  placeholder="예: 블로그, 썸네일, 디자인"
-                  value={seo.keywords ? seo.keywords.join(", ") : ""}
-                  onChange={handleKeywordsChange}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  검색 노출에 도움이 되는 키워드를 쉼표로 구분하여 입력하세요.
-                </p>
-              </div>
-            </div>
+      {selectedElement && (
+        <div className="mb-4">
+          <h3 className="font-medium mb-2">요소 속성</h3>
+          {selectedElement.type === "text" && renderTextProperties()}
+          {selectedElement.type === "image" && renderImageProperties()}
+          {selectedElement.type === "shape" && renderShapeProperties()}
+          <div className="mt-4">
+            <button
+              className="w-full px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm hover:bg-destructive/90 transition-colors"
+              onClick={handleDeleteElement}
+            >
+              요소 삭제
+            </button>
           </div>
         </div>
       )}
-    </aside>
+    </div>
   );
 }

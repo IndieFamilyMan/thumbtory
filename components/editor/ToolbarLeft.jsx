@@ -284,96 +284,64 @@ export function ToolbarLeft({ isMobileView = false }) {
     }
   };
 
-  // 배경 이미지 파일 선택 핸들러
-  const handleBackgroundImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  // 배경 이미지 설정 함수
+  const handleImageBgSelect = async (e) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+
+    try {
+      const file = e.target.files[0];
       console.log("배경 이미지 파일 선택됨:", file.name, file.type);
 
-      // 이미지 파일 형식 확인
+      // 이미지 형식 및 크기 검증
       if (!file.type.startsWith("image/")) {
         alert("이미지 파일만 선택할 수 있습니다.");
         return;
       }
 
       // 파일 크기 제한 (20MB)
-      const maxSize = 20 * 1024 * 1024; // 20MB
-      if (file.size > maxSize) {
+      if (file.size > 20 * 1024 * 1024) {
         alert(
           "이미지 파일 크기가 너무 큽니다. 20MB 이하의 파일을 선택해주세요."
         );
         return;
       }
 
-      const reader = new FileReader();
+      // URL 생성 및 이미지 로드
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
 
-      reader.onload = (event) => {
-        const imageDataUrl = event.target.result;
-        console.log("이미지 로드 완료, 데이터 길이:", imageDataUrl.length);
+      img.onload = () => {
+        console.log("이미지 로드 완료, 크기:", img.width, "x", img.height);
 
-        // 이미지 미리 로드하여 크기 확인 및 최적화
-        const img = new Image();
-        img.onload = () => {
-          console.log("배경 이미지 크기 확인:", img.width, "x", img.height);
-
-          // 너무 큰 이미지는 리사이징하여 성능 개선
-          let finalImageDataUrl = imageDataUrl;
-
-          // 이미지 크기가 너무 크면 캔버스를 사용해 크기 조정
-          if (img.width > 2000 || img.height > 2000) {
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
-
-            // 최대 크기 지정 (원래 비율 유지)
-            const maxDimension = 2000;
-            let newWidth = img.width;
-            let newHeight = img.height;
-
-            if (img.width > img.height) {
-              // 가로가 더 긴 경우
-              newWidth = maxDimension;
-              newHeight = Math.round(img.height * (maxDimension / img.width));
-            } else {
-              // 세로가 더 긴 경우
-              newHeight = maxDimension;
-              newWidth = Math.round(img.width * (maxDimension / img.height));
-            }
-
-            canvas.width = newWidth;
-            canvas.height = newHeight;
-
-            // 이미지 그리기
-            ctx.drawImage(img, 0, 0, newWidth, newHeight);
-
-            // 새 이미지 데이터 URL 생성 (JPEG 품질 0.9)
-            finalImageDataUrl = canvas.toDataURL("image/jpeg", 0.9);
-            console.log("이미지 크기 조정 완료:", newWidth, "x", newHeight);
-          }
-
-          // 배경 이미지 설정
-          setBackground({
-            type: "image",
-            value: finalImageDataUrl,
-          });
-
-          console.log("배경 이미지 상태 업데이트 완료");
+        // 배경 정보 객체 생성
+        const backgroundInfo = {
+          type: "image",
+          url: objectUrl,
+          file: file,
+          width: img.width,
+          height: img.height,
+          filename: file.name,
         };
 
-        img.onerror = (error) => {
-          console.error("배경 이미지 로드 중 오류:", error);
-          alert("이미지 로드 중 오류가 발생했습니다.");
-        };
+        // 에디터 스토어에 배경 정보 설정
+        setBackground(backgroundInfo);
+        console.log("배경 이미지 설정 완료:", file.name);
 
-        img.src = imageDataUrl;
+        // 파일 선택 필드 초기화
+        e.target.value = null;
       };
 
-      reader.onerror = (error) => {
-        console.error("이미지 파일 읽기 오류:", error);
-        alert("이미지 파일을 읽는 중 오류가 발생했습니다.");
+      img.onerror = () => {
+        console.error("이미지 로드 실패:", file.name);
+        alert("이미지 로드에 실패했습니다. 다른 이미지를 선택해주세요.");
+        e.target.value = null;
       };
 
-      reader.readAsDataURL(file);
-      e.target.value = null;
+      // 이미지 로드 시작
+      img.src = objectUrl;
+    } catch (error) {
+      console.error("배경 이미지 처리 중 오류:", error);
+      alert("이미지 처리 중 오류가 발생했습니다.");
     }
   };
 
@@ -451,7 +419,7 @@ export function ToolbarLeft({ isMobileView = false }) {
             ref={backgroundImageInputRef}
             style={{ display: "none" }}
             accept="image/*"
-            onChange={handleBackgroundImageUpload}
+            onChange={handleImageBgSelect}
           />
           <button
             className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"

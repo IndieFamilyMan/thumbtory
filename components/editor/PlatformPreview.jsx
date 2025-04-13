@@ -10,6 +10,7 @@ import {
 import { useEditorStore } from "@/store/editor";
 import html2canvas from "html2canvas";
 import { useToast } from "@/hooks/use-toast";
+import { SocialMediaLayouts } from "@/lib/social-media-layouts";
 
 import * as fabric from "fabric";
 
@@ -268,210 +269,120 @@ export const PlatformPreview = forwardRef(function PlatformPreview(
     }
   };
 
-  // 미리보기 이미지 생성 함수에서 플랫폼별 처리 추가
+  // 활성 플랫폼 변경 시 미리보기 업데이트
+  useEffect(() => {
+    if (activePlatformId && !isGenerating) {
+      generatePreviews([activePlatformId], fitMode, bgMode);
+    }
+  }, [activePlatformId]);
+
+  // 미리보기 생성 함수
   const generatePreviews = async (
     platformIds = [],
     fitModeParam = fitMode,
     bgModeParam = bgMode
   ) => {
-    if (isGenerating) return;
-
-    setIsGenerating(true);
-    loadingTypeRef.current = "preview"; // 로딩 타입 설정
-
     try {
-      const newPreviews = { ...previews };
+      // 미리보기 생성 상태 설정
+      setIsGenerating(true);
 
-      // 플랫폼 ID 선택 로직 개선
-      let platformsToGenerate = [];
+      // 활성 플랫폼만 미리보기 생성 (다른 플랫폼 비활성화)
+      const platformsToGenerate =
+        platformIds.length > 0 ? platformIds : [activePlatformId];
 
-      if (platformIds && platformIds.length > 0) {
-        // 명시적으로 제공된 플랫폼 ID 사용
-        platformsToGenerate = platformIds;
-      } else if (selectedPlatforms && selectedPlatforms.length > 0) {
-        // selectedPlatforms에서 ID 추출
-        platformsToGenerate = selectedPlatforms.map((p) => p.id);
-      } else {
-        // 활성화된 모든 플랫폼 사용
-        platformsToGenerate = platforms
-          .filter((p) => p.enabled)
-          .map((p) => p.id);
+      console.log(
+        `다음 플랫폼의 미리보기 생성: ${platformsToGenerate.join(", ")}`
+      );
+
+      // 각 플랫폼별 미리보기 생성
+      for (const platformId of platformsToGenerate) {
+        const platformLayout = SocialMediaLayouts[platformId];
+        if (!platformLayout) continue;
+
+        await generatePlatformPreview(
+          platformId,
+          platformLayout,
+          fitModeParam,
+          bgModeParam
+        );
       }
 
-      console.log("생성할 미리보기 플랫폼:", platformsToGenerate);
+      // 미리보기 생성 완료
+      setIsGenerating(false);
+    } catch (e) {
+      console.error("미리보기 생성 중 오류:", e);
+      setIsGenerating(false);
+      toast({
+        title: "미리보기 생성 실패",
+        description:
+          "미리보기를 생성하는 중 오류가 발생했습니다. 다시 시도해주세요.",
+        variant: "destructive",
+      });
+    }
+  };
 
-      // 생성할 플랫폼이 없으면 알림
-      if (platformsToGenerate.length === 0) {
-        toast({
-          title: "미리보기 생성 실패",
-          description: "활성화된 플랫폼이 없습니다.",
-          variant: "destructive",
-        });
-        setIsGenerating(false);
-        loadingTypeRef.current = null;
+  // 단일 플랫폼 미리보기 생성
+  const generatePlatformPreview = async (
+    platformId,
+    platform,
+    fitModeParam = fitMode,
+    bgModeParam = bgMode
+  ) => {
+    try {
+      // 캔버스 인스턴스 가져오기
+      const activeCanvas =
+        window.fabricCanvasInstance || document.__EDITOR_FABRIC_CANVAS__;
+
+      if (!activeCanvas) {
+        console.error("캔버스 인스턴스를 찾을 수 없습니다.");
         return;
       }
 
-      // 워드프레스 플랫폼에 대한 특별 처리
-      const hasWordpress = platformsToGenerate.includes("wordpress");
-
-      if (hasWordpress) {
-        console.log("워드프레스 플랫폼 특별 처리:", {
-          fillScreen: true, // 항상 꽉채움 모드 사용
-          fitMode: "cover", // 항상 cover 모드 적용
-        });
-      }
-
-      const platformSizeInfo = {}; // 각 플랫폼별 크기 정보 저장을 위한 객체
-
-      const platformImagePromises = platformsToGenerate.map(
-        async (platformId) => {
-          try {
-            // 플랫폼 정보 가져오기
-            const platform = platforms.find((p) => p.id === platformId);
-            if (!platform) {
-              console.error(`플랫폼 정보를 찾을 수 없음: ${platformId}`);
-              return null;
-            }
-
-            // 플랫폼별 이미지 생성을 위한 설정 결정
-            // 워드프레스는 항상 꽉채움 모드 사용
-            const currentFitMode =
-              platformId === "wordpress" ? "cover" : fitModeParam;
-
-            // 플랫폼별 이미지 생성
-            const imageUrl = await generateFullSizeImage(
-              platform,
-              currentFitMode,
-              bgModeParam
-            );
-
-            // 이미지 생성 성공 시에만 처리
-            if (imageUrl) {
-              // 워드프레스 플랫폼 특별 처리
-              if (platformId === "wordpress") {
-                // 이미지 URL 저장 전에 요소 위치 확인
-                console.log("워드프레스 플랫폼 이미지 생성 전 처리:", {
-                  platformId,
-                  fitMode: "cover", // 항상 cover 모드 적용
-                  moveInfo: window.__WORDPRESS_MOVE_INFO__ || [],
-                });
-
-                // 저장된 이동 정보가 있으면 활용 (이 부분에서 실제 이미지에 적용)
-                if (
-                  window.__WORDPRESS_MOVE_INFO__ &&
-                  window.__WORDPRESS_MOVE_INFO__.length > 0
-                ) {
-                  console.log(
-                    `📐 이미지 생성을 위해 ${window.__WORDPRESS_MOVE_INFO__.length}개 요소 위치 조정`
-                  );
-
-                  // fabric.js 캔버스 참조 가져오기
-                  const activeCanvas =
-                    window.fabricCanvasInstance ||
-                    document.__EDITOR_FABRIC_CANVAS__;
-
-                  if (activeCanvas) {
-                    // 이미지 생성용 임시 캔버스 복제
-                    const tempCanvas = activeCanvas.toJSON([
-                      "id",
-                      "type",
-                      "originX",
-                      "originY",
-                      "left",
-                      "top",
-                      "width",
-                      "height",
-                      "fill",
-                      "stroke",
-                      "strokeWidth",
-                      "angle",
-                      "opacity",
-                      "scaleX",
-                      "scaleY",
-                      "flipX",
-                      "flipY",
-                      "skewX",
-                      "skewY",
-                      "text",
-                      "fontSize",
-                      "fontFamily",
-                      "fontWeight",
-                      "fontStyle",
-                      "lineHeight",
-                      "underline",
-                      "overline",
-                      "linethrough",
-                      "textAlign",
-                      "backgroundColor",
-                      "textBackgroundColor",
-                      "charSpacing",
-                      "styles",
-                      "direction",
-                      "path",
-                      "pathOffset",
-                      "radius",
-                    ]);
-
-                    // JSON을 파싱하여 이동 정보 적용
-                    if (tempCanvas && tempCanvas.objects) {
-                      window.__WORDPRESS_MOVE_INFO__.forEach((moveItem) => {
-                        const objIndex = tempCanvas.objects.findIndex(
-                          (obj) => obj.id === moveItem.id
-                        );
-
-                        if (objIndex !== -1) {
-                          // 임시 JSON에만 이동 정보 적용
-                          tempCanvas.objects[objIndex].left = moveItem.newLeft;
-                          tempCanvas.objects[objIndex].top = moveItem.newTop;
-                        }
-                      });
-
-                      // 임시 캔버스 JSON 저장 (이미지 생성에 활용)
-                      window.__WORDPRESS_TEMP_CANVAS__ = tempCanvas;
-                    }
-                  } else {
-                    console.log("⚠️ fabric.js 캔버스 참조를 찾을 수 없습니다");
-                  }
-                }
-
-                newPreviews[platformId] = {
-                  dataUrl: imageUrl,
-                  fitMode: "cover", // 항상 꽉채움 모드 사용
-                };
-              } else {
-                // 다른 플랫폼들은 기존 방식대로 처리
-                newPreviews[platformId] = imageUrl;
-              }
-            }
-
-            return platformId;
-          } catch (error) {
-            console.error(
-              `Error generating preview for platform ${platformId}:`,
-              error
-            );
-            return null;
-          }
-        }
+      // 플랫폼 정보로 이미지 생성
+      const imageUrl = await generateFullSizeImage(
+        platform,
+        fitModeParam,
+        bgModeParam
       );
 
-      const results = await Promise.all(platformImagePromises);
+      if (imageUrl) {
+        // 미리보기 상태 업데이트
+        setPreviews((prev) => ({
+          ...prev,
+          [platformId]: imageUrl,
+        }));
 
-      setPreviews(newPreviews);
-      previewsRef.current = newPreviews;
-      setFileInfos(platformSizeInfo);
-    } catch (error) {
-      console.error("미리보기 생성 중 오류 발생:", error);
-      toast({
-        title: "미리보기 생성 오류",
-        description: "미리보기 생성 중 오류가 발생했습니다.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGenerating(false);
-      loadingTypeRef.current = null;
-      generationAttemptRef.current = 0;
+        // 파일 정보 업데이트
+        const fileName = seo.filename
+          ? `${seo.filename}-${platformId}`
+          : `thumbtory-${platformId}`;
+
+        setFileInfos((prev) => ({
+          ...prev,
+          [platformId]: {
+            size: estimateFileSize(imageUrl),
+            name: fileName,
+            width: platform.width,
+            height: platform.height,
+          },
+        }));
+      }
+    } catch (e) {
+      console.error(`${platformId} 미리보기 생성 중 오류:`, e);
+    }
+  };
+
+  // 파일 크기 추정 함수
+  const estimateFileSize = (dataUrl) => {
+    try {
+      // base64 데이터 크기 계산
+      const base64 = dataUrl.split(",")[1];
+      const byteSize = Math.ceil((base64.length * 3) / 4);
+
+      // KB 단위로 변환
+      return Math.round(byteSize / 1024);
+    } catch (e) {
+      return 0;
     }
   };
 

@@ -53,6 +53,10 @@ export default function Canvas({
   const canvasContainerRef = useRef(null);
   const canvasDOMRef = useRef(null);
   const cleanupTimerRef = useRef(null);
+  const prevPlatformIdRef = useRef(null);
+  const isResizingRef = useRef(false);
+  const platformChangeTimerRef = useRef(null);
+  const platformChangeCountRef = useRef(0);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasEmpty, setCanvasEmpty] = useState(true);
   const [canvasKey, setCanvasKey] = useState(Date.now());
@@ -93,11 +97,37 @@ export default function Canvas({
     SocialMediaLayouts[activePlatformId] || SocialMediaLayouts.instagram;
   const { toast } = useToast();
 
+  // 텍스트 편집 상태 확인 유틸리티 함수 - 컴포넌트 상단으로 이동
+  const isEditingText = () => {
+    // 전역 변수 확인
+    if (window.__EDITOR_TEXT_EDITING__ === true) {
+      return true;
+    }
+
+    // 캔버스 객체 확인
+    if (fabricCanvasRef.current) {
+      const activeObject = fabricCanvasRef.current.getActiveObject();
+      return activeObject?.type === "textbox" && activeObject?.isEditing;
+    }
+
+    return isTextEditing;
+  };
+
   // 안전하게 브러시 속성에 접근하는 헬퍼 함수
   const safeSetBrushProperty = (canvas, property, value) => {
     if (!canvas) return;
 
+    // 브러시 초기화 재시도 횟수 제한을 위한 정적 변수
+    if (!window.__BRUSH_INIT_ATTEMPTS__) {
+      window.__BRUSH_INIT_ATTEMPTS__ = 0;
+    }
+
     try {
+      // 최대 재시도 횟수를 초과한 경우 무한 경고 방지
+      if (window.__BRUSH_INIT_ATTEMPTS__ > 5) {
+        return; // 재시도 중단
+      }
+
       // 먼저 drawing mode를 활성화하여 브러시 생성 보장
       const previousDrawingMode = canvas.isDrawingMode;
 
@@ -107,31 +137,50 @@ export default function Canvas({
       // 작은 지연 후 브러시 초기화 시도
       setTimeout(() => {
         try {
+          // 최대 재시도 횟수 확인
+          window.__BRUSH_INIT_ATTEMPTS__++;
+
           // 브러시 객체가 생성되었는지 확인
           if (!canvas.freeDrawingBrush) {
-            console.warn(
-              "freeDrawingBrush가 준비되지 않았습니다. 초기화를 재시도합니다."
-            );
+            // 최대 재시도 횟수에 따라 로그 레벨 조정
+            if (window.__BRUSH_INIT_ATTEMPTS__ <= 3) {
+              console.log("정보: freeDrawingBrush 초기화 진행 중...");
+            } else {
+              console.log(
+                "정보: freeDrawingBrush 초기화 재시도 (시도 " +
+                  window.__BRUSH_INIT_ATTEMPTS__ +
+                  "/5)"
+              );
+            }
+
             // 기본 브러시 클래스 확인
             if (typeof fabric !== "undefined" && fabric.PencilBrush) {
               canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
             }
+          } else {
+            // 브러시가 초기화되면 카운터 초기화
+            window.__BRUSH_INIT_ATTEMPTS__ = 0;
           }
 
           // 속성 설정
           if (canvas.freeDrawingBrush && property && value !== undefined) {
             canvas.freeDrawingBrush[property] = value;
-            console.log(`브러시 ${property} 속성 설정 완료:`, value);
           }
 
           // 이전 drawing mode 상태로 복원
           canvas.isDrawingMode = previousDrawingMode;
         } catch (innerErr) {
-          console.error(`브러시 속성 설정 재시도 중 오류:`, innerErr);
+          // 오류 발생해도 조용히 처리
+          if (window.__BRUSH_INIT_ATTEMPTS__ <= 3) {
+            console.log("정보: 브러시 속성 설정 재시도 중");
+          }
         }
-      }, 100);
+      }, 200); // 조금 더 긴 지연 시간
     } catch (e) {
-      console.error(`브러시 속성 ${property} 설정 중 오류:`, e);
+      // 치명적인 오류가 아닌 경우 조용히 무시
+      if (window.__BRUSH_INIT_ATTEMPTS__ <= 3) {
+        console.log(`정보: 브러시 ${property} 속성 설정 지연됨`);
+      }
     }
   };
 
@@ -310,748 +359,70 @@ export default function Canvas({
 
   // 플랫폼 변경 시 안전하게 캔버스 재설정
   useEffect(() => {
-    // 캔버스 클린업
-    const cleanup = () => {
-      if (fabricCanvasRef.current) {
-        try {
-          console.log("플랫폼 변경: 이전 캔버스 정리");
-          fabricCanvasRef.current.off();
-          fabricCanvasRef.current.clear();
-          fabricCanvasRef.current.dispose();
-        } catch (e) {
-          console.error("플랫폼 변경 시 캔버스 정리 중 오류:", e);
-        } finally {
-          fabricCanvasRef.current = null;
-        }
-      }
-    };
+    if (!canvasReady || !fabricCanvasRef.current) return;
 
-    // 기존 캔버스 정리
-    cleanup();
-
-    // 안전하게 상태 초기화 후 새 키 설정
-    setCanvasReady(false);
-    setIsMounted(false);
-
-    // 지연 후 새 캔버스 생성 준비
-    cleanupTimerRef.current = setTimeout(() => {
-      setCanvasKey(Date.now());
-    }, 100);
-
-    return () => {
-      if (cleanupTimerRef.current) {
-        clearTimeout(cleanupTimerRef.current);
-      }
-    };
-  }, [activePlatformId]);
-
-  // 캔버스 초기화 - 안전한 초기화를 위한 조건 개선
-  useEffect(() => {
-    if (!canvasRef.current || !isMounted || !canvasReady) return;
-
-    // 자식 노드 존재 여부 확인
-    if (!canvasRef.current.parentNode) {
-      console.warn("캔버스 요소에 부모 노드가 없습니다. 초기화를 건너뜁니다.");
+    // 이미 처리 중이면 중복 처리 방지
+    if (isResizingRef.current) {
+      console.log("플랫폼 변경 처리 중 - 요청 무시");
       return;
     }
 
-    // 캔버스 이벤트 리스너 설정 함수
-    const setupCanvasEventListeners = (canvas) => {
-      if (!canvas) return;
+    console.log("플랫폼 ID 변경 감지:", activePlatformId);
 
-      // 기본 마우스 이벤트 처리
-      canvas.on("mouse:down", (e) => {
-        console.log("Canvas: mouse:down 이벤트 발생", {
-          target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
-          isTextEditing: isEditingText(),
-          pointer: e.pointer,
-          button: e.button,
-        });
-
-        if (!e.target) return;
-
-        // 텍스트 객체 선택 시 처리
-        if (e.target.type === "textbox" || e.target.type === "i-text") {
-          console.log("Canvas: 텍스트 객체 선택됨", e.target.id);
-          // 선택된 텍스트 객체를 앞으로 가져오기
-          canvas.bringObjectToFront(e.target);
-          setSelectedElementId(e.target.id);
-          canvas.renderAll();
-        }
-      });
-
-      // 텍스트 이동 중 해상도 유지를 위한 이벤트 처리
-      canvas.on("object:moving", (e) => {
-        if (
-          e.target &&
-          (e.target.type === "textbox" || e.target.type === "i-text")
-        ) {
-          // 이동 중 텍스트 렌더링 품질 최적화
-          e.target.set({
-            objectCaching: false,
-            dirty: true,
-          });
-          // 텍스트 객체를 최상위로 가져오기
-          canvas.bringObjectToFront(e.target);
-          canvas.renderAll();
-        }
-      });
-
-      // 객체 수정 완료 후 처리
-      canvas.on("object:modified", (e) => {
-        if (
-          e.target &&
-          (e.target.type === "textbox" || e.target.type === "i-text")
-        ) {
-          // 객체 위치 업데이트
-          if (e.target.id) {
-            // 이동 후 상태 업데이트
-            updateElementProperty(e.target.id, "x", e.target.left);
-            updateElementProperty(e.target.id, "y", e.target.top);
-
-            // 회전이나 스케일 변경 시
-            if (e.target.angle !== 0) {
-              updateElementProperty(e.target.id, "rotation", e.target.angle);
-            }
-            if (e.target.scaleX !== 1) {
-              updateElementProperty(e.target.id, "scaleX", e.target.scaleX);
-            }
-            if (e.target.scaleY !== 1) {
-              updateElementProperty(e.target.id, "scaleY", e.target.scaleY);
-            }
-
-            // 상태 저장
-            saveState();
-          }
-
-          // 이동 후 캔버스 다시 렌더링하여 선명도 유지
-          canvas.renderAll();
-        }
-      });
-
-      // 마우스 오버 이벤트 - 선택 가능한 객체 강조 표시
-      canvas.on("mouse:over", (e) => {
-        if (!e.target) return;
-
-        console.log("Canvas: mouse:over 이벤트 발생", {
-          target: `${e.target.type} (id: ${e.target.id})`,
-          selectable: e.target.selectable,
-          evented: e.target.evented,
-        });
-
-        // 텍스트 객체에 대한 특별 처리
-        if (e.target.type === "textbox" || e.target.type === "i-text") {
-          e.target.set("borderColor", "#00aaff");
-          e.target.set("cornerColor", "#00aaff");
-          canvas.requestRenderAll();
-        }
-      });
-
-      // 마우스 아웃 이벤트 - 강조 표시 제거
-      canvas.on("mouse:out", (e) => {
-        if (!e.target) return;
-
-        // 텍스트 객체에 대한 특별 처리
-        if (e.target.type === "textbox" || e.target.type === "i-text") {
-          e.target.set("borderColor", "#0084ff");
-          e.target.set("cornerColor", "#0084ff");
-          canvas.requestRenderAll();
-        }
-      });
-
-      // 객체 선택 이벤트 처리
-      canvas.on("selection:created", (e) => {
-        console.log("Canvas: selection:created 이벤트 발생", {
-          selected: e.selected
-            ? e.selected.map((obj) => `${obj.type} (id: ${obj.id})`)
-            : "없음",
-        });
-        handleObjectChange(e);
-      });
-
-      canvas.on("selection:updated", (e) => {
-        console.log("Canvas: selection:updated 이벤트 발생", {
-          selected: e.selected
-            ? e.selected.map((obj) => `${obj.type} (id: ${obj.id})`)
-            : "없음",
-        });
-        handleObjectChange(e);
-      });
-
-      canvas.on("selection:cleared", (e) => {
-        console.log("Canvas: selection:cleared 이벤트 발생");
-        handleObjectChange(e);
-        setSelectedElementId(null);
-      });
-
-      // 더블 클릭으로 텍스트 편집 모드 진입
-      canvas.on("mouse:dblclick", (e) => {
-        console.log("Canvas: mouse:dblclick 이벤트 발생", {
-          target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
-        });
-
-        if (
-          e.target &&
-          (e.target.type === "textbox" || e.target.type === "i-text")
-        ) {
-          console.log("Canvas: 텍스트 더블클릭 - 편집 모드 진입:", e.target.id);
-          try {
-            // 텍스트 객체를 최상위로 이동
-            canvas.bringObjectToFront(e.target);
-
-            // 텍스트 편집 모드 진입
-            e.target.enterEditing();
-
-            // 텍스트 전체 선택
-            if (typeof e.target.selectAll === "function") {
-              e.target.selectAll();
-            }
-
-            canvas.renderAll();
-          } catch (err) {
-            console.error("텍스트 편집 모드 진입 중 오류:", err);
-          }
-        }
-      });
-
-      // 캔버스 전체 상태 로깅
-      console.log(
-        "Canvas: 현재 캔버스 객체 목록",
-        canvas.getObjects().map((obj) => ({
-          type: obj.type,
-          id: obj.id,
-          selectable: obj.selectable,
-          evented: obj.evented,
-          visible: obj.visible,
-        }))
-      );
-
-      // 캔버스 설정 확인
-      console.log("Canvas: 캔버스 설정", {
-        selection: canvas.selection,
-        skipTargetFind: canvas.skipTargetFind,
-        selectionKey: canvas.selectionKey,
-        selectionFullyContained: canvas.selectionFullyContained,
-        selectionColor: canvas.selectionColor,
-        selectionBorderColor: canvas.selectionBorderColor,
-      });
-    };
-
-    // 텍스트 편집 이벤트 설정 함수
-    const setupTextEditingEvents = (canvas) => {
-      if (!canvas) return;
-
-      // 텍스트 편집 시작 시 이벤트
-      canvas.on("text:editing:entered", (e) => {
-        try {
-          const textObject = e.target;
-          if (textObject) {
-            console.log("텍스트 편집 시작:", textObject.id);
-
-            // 편집 상태 설정
-            setIsTextEditing(true);
-            if (onTextEdit && typeof onTextEdit === "function") {
-              onTextEdit(true);
-            }
-            if (
-              setShowTextToolbar &&
-              typeof setShowTextToolbar === "function"
-            ) {
-              setShowTextToolbar(true);
-            }
-
-            // 텍스트 객체 선택 상태 유지
-            setSelectedElementId(textObject.id);
-
-            // 객체를 앞으로 가져오기
-            canvas.bringObjectToFront(textObject);
-            canvas.renderAll();
-          }
-        } catch (err) {
-          console.error("텍스트 편집 시작 처리 중 오류:", err);
-        }
-      });
-
-      // 텍스트 편집 종료 시 이벤트
-      canvas.on("text:editing:exited", (e) => {
-        try {
-          const textObject = e.target;
-          if (textObject) {
-            console.log("텍스트 편집 종료:", textObject.id, textObject.text);
-
-            // 편집 상태 해제
-            setIsTextEditing(false);
-            if (onTextEdit && typeof onTextEdit === "function") {
-              onTextEdit(false);
-            }
-            if (
-              setShowTextToolbar &&
-              typeof setShowTextToolbar === "function"
-            ) {
-              setShowTextToolbar(false);
-            }
-
-            // 텍스트 내용 업데이트
-            if (textObject.id) {
-              updateElementProperty(textObject.id, "text", textObject.text);
-              saveState();
-            }
-
-            canvas.renderAll();
-          }
-        } catch (err) {
-          console.error("텍스트 편집 종료 처리 중 오류:", err);
-        }
-      });
-
-      // 텍스트 변경 시 이벤트
-      canvas.on("text:changed", (e) => {
-        try {
-          const textObject = e.target;
-          if (textObject && textObject.id) {
-            console.log("텍스트 변경:", textObject.id, textObject.text);
-
-            // 텍스트 내용 즉시 업데이트
-            updateElementProperty(textObject.id, "text", textObject.text);
-          }
-        } catch (err) {
-          console.error("텍스트 변경 처리 중 오류:", err);
-        }
-      });
-
-      // IME 입력 처리
-      const onCompositionStart = () => {
-        if (
-          canvas.getActiveObject() &&
-          canvas.getActiveObject().type === "text"
-        ) {
-          canvas.getActiveObject().isEditing = true;
-        }
-      };
-
-      const onCompositionEnd = () => {
-        if (
-          canvas.getActiveObject() &&
-          canvas.getActiveObject().type === "text"
-        ) {
-          const textObject = canvas.getActiveObject();
-          updateElementProperty(textObject.id, "text", textObject.text);
-          textObject.isEditing = false;
-          canvas.renderAll();
-        }
-      };
-
-      // IME 이벤트 리스너 등록
-      document.addEventListener("compositionstart", onCompositionStart);
-      document.addEventListener("compositionend", onCompositionEnd);
-
-      return () => {
-        document.removeEventListener("compositionstart", onCompositionStart);
-        document.removeEventListener("compositionend", onCompositionEnd);
-      };
-    };
-
-    // 객체 이동 이벤트 설정 함수
-    const setupObjectMovementEvents = (canvas) => {
-      if (!canvas) return;
-
-      // 객체 선택 시 이벤트
-      canvas.on("selection:created", (e) => {
-        const selectedObject = e.selected[0];
-        if (selectedObject) {
-          setSelectedElementId(selectedObject.id);
-        }
-      });
-
-      // 객체 선택 해제 시 이벤트
-      canvas.on("selection:cleared", () => {
-        setSelectedElementId(null);
-      });
-
-      // 객체 이동 시작 시 이벤트
-      canvas.on("object:moving", (e) => {
-        const movingObject = e.target;
-        if (movingObject) {
-          // 실시간으로 위치 업데이트
-          updateElementProperty(
-            movingObject.id,
-            "x",
-            Math.round(movingObject.left)
-          );
-          updateElementProperty(
-            movingObject.id,
-            "y",
-            Math.round(movingObject.top)
-          );
-        }
-      });
-
-      // 객체 이동 완료 시 이벤트
-      canvas.on("object:modified", (e) => {
-        const modifiedObject = e.target;
-        if (modifiedObject) {
-          // 최종 위치 저장 및 상태 업데이트
-          updateElementProperty(
-            modifiedObject.id,
-            "x",
-            Math.round(modifiedObject.left)
-          );
-          updateElementProperty(
-            modifiedObject.id,
-            "y",
-            Math.round(modifiedObject.top)
-          );
-          saveState();
-        }
-      });
-
-      // 객체 크기 조절 시 이벤트
-      canvas.on("object:scaling", (e) => {
-        const scalingObject = e.target;
-        if (scalingObject) {
-          const { scaleX, scaleY } = scalingObject;
-          updateElementProperty(scalingObject.id, "scaleX", scaleX);
-          updateElementProperty(scalingObject.id, "scaleY", scaleY);
-        }
-      });
-
-      // 객체 회전 시 이벤트
-      canvas.on("object:rotating", (e) => {
-        const rotatingObject = e.target;
-        if (rotatingObject) {
-          updateElementProperty(
-            rotatingObject.id,
-            "angle",
-            rotatingObject.angle
-          );
-        }
-      });
-    };
-
-    // Initialize canvas
+    // 캔버스가 이미 초기화된 상태인지 확인
     if (fabricCanvasRef.current) {
       try {
-        // 모든 이벤트 리스너 제거
-        fabricCanvasRef.current.off();
-        // 모든 객체 제거
-        fabricCanvasRef.current.clear();
-        // 캔버스 dispose
-        fabricCanvasRef.current.dispose();
-      } catch (e) {
-        console.error("캔버스 dispose 중 오류:", e);
-      }
-      fabricCanvasRef.current = null;
-    }
-
-    // 캔버스 옵션 설정
-    let canvas;
-    try {
-      // DOM 요소가 여전히 유효한지 다시 확인
-      if (!canvasRef.current || !canvasRef.current.parentNode) {
-        console.error("캔버스 DOM 요소가 더 이상 유효하지 않습니다.");
-        return;
-      }
-
-      canvas = new FabricCanvas(canvasRef.current, {
-        width: width,
-        height: height,
-        preserveObjectStacking: true,
-        selection: true,
-        backgroundColor: "#ffffff",
-        renderOnAddRemove: true,
-        stateful: true,
-        fireRightClick: false,
-        stopContextMenu: true,
-        skipTargetFind: false,
-        interactive: true,
-        enableRetinaScaling: true,
-        allowTouchScrolling: false,
-        imageSmoothingEnabled: true,
-        perPixelTargetFind: false,
-        selectionColor: "rgba(0, 132, 255, 0.3)",
-        selectionBorderColor: "rgba(0, 132, 255, 0.8)",
-        selectionLineWidth: 1,
-        hoverCursor: "pointer",
-        defaultCursor: "default",
-        // 텍스트 렌더링 품질 개선을 위한 설정
-        textSmoothingEnabled: true,
-        antialias: true,
-        renderOnAddRemove: true,
-        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 3), // 최소 3배로 증가
-        imageSmoothingQuality: "high",
-      });
-
-      // 캔버스 참조 저장
-      fabricCanvasRef.current = canvas;
-      setCanvas(canvas);
-
-      // 전역 접근을 위한 인스턴스 저장 (내보내기에서 사용)
-      window.fabricCanvasInstance = canvas;
-      document.__EDITOR_FABRIC_CANVAS__ = canvas;
-
-      // 캔버스 이벤트 리스너 설정
-      setupCanvasEventListeners(canvas);
-      setupTextEditingEvents(canvas);
-      setupObjectMovementEvents(canvas);
-
-      // 한글 IME 처리 개선을 위한 설정
-      try {
-        // 브러시 초기화 확인 - 수정된 코드
-        canvas.isDrawingMode = true;
-
-        // 브러시 타입이 설정되어 있지 않으면 PencilBrush 사용
-        if (
-          typeof fabric !== "undefined" &&
-          fabric.PencilBrush &&
-          !canvas.freeDrawingBrush
-        ) {
-          canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-        }
-
-        // 브러시 속성 설정
-        if (canvas.freeDrawingBrush) {
-          canvas.freeDrawingBrush.color = "#000000";
-          canvas.freeDrawingBrush.width = 2;
-          console.log("브러시 직접 초기화 성공");
-        } else {
-          // 안전한 방식으로 지연 초기화
-          setTimeout(() => {
-            safeSetBrushProperty(canvas, "color", "#000000");
-            safeSetBrushProperty(canvas, "width", 2);
-          }, 200);
-        }
-
-        // 이전 모드로 복원
-        canvas.isDrawingMode = false;
-      } catch (e) {
-        console.error("freeDrawingBrush 설정 중 오류:", e);
-      }
-
-      // 텍스트 입력 시 IME 한글 문제 개선을 위한 이벤트 핸들러 함수
-      const handleKeyDown = function (e) {
-        const activeObject = canvas.getActiveObject();
-        if (
-          !activeObject ||
-          activeObject.type !== "textbox" ||
-          !activeObject.isEditing
-        ) {
-          return;
-        }
-
-        // 키 이벤트 정보 저장
-        activeObject._lastKeyEvent = {
-          key: e.key,
-          isComposing: e.isComposing,
-          timestamp: Date.now(),
-        };
-
-        // 현재 상태와 커서 위치 저장
-        if (activeObject.hiddenTextarea) {
+        // 크기 변경을 위한 타이머 설정 (React 렌더링 사이클 밖에서 처리)
+        setTimeout(() => {
           try {
-            activeObject._prevText = activeObject.text;
-            activeObject._savedSelectionStart =
-              activeObject.hiddenTextarea.selectionStart;
-            activeObject._savedSelectionEnd =
-              activeObject.hiddenTextarea.selectionEnd;
-          } catch (err) {
-            console.error("커서 위치 저장 오류:", err);
-          }
-        }
+            if (!fabricCanvasRef.current) return;
 
-        // IME 이벤트 감지 및 처리
-        if (e.key === "Process" || e.key === "Unidentified" || e.isComposing) {
-          // 이벤트 전파 중지
-          e.stopPropagation();
+            // 캔버스 크기 업데이트
+            const { width, height } =
+              SocialMediaLayouts[activePlatformId] ||
+              SocialMediaLayouts.instagram;
 
-          // 조합 상태 설정
-          activeObject._isComposing = true;
-          window.__EDITOR_IME_COMPOSING__ = true;
+            // 배경 이미지 임시 저장 (있는 경우)
+            const oldBackgroundImage = fabricCanvasRef.current.backgroundImage;
 
-          // 캔버스 컴포지션 모드 설정
-          if (canvas) {
-            canvas._isCompositionMode = true;
-          }
+            // 크기 설정 (canvasEl이 실제 DOM 요소)
+            fabricCanvasRef.current.setWidth(width);
+            fabricCanvasRef.current.setHeight(height);
+            fabricCanvasRef.current.calcOffset();
 
-          // 포커스 유지 확인
-          if (
-            activeObject.hiddenTextarea &&
-            document.activeElement !== activeObject.hiddenTextarea
-          ) {
-            activeObject.hiddenTextarea.focus();
-          }
-
-          // 조합 중 렌더링
-          canvas.renderAll();
-        }
-
-        // 특수 키 처리 - Escape 키는 조합 중에는 무시
-        if (e.key === "Escape" && activeObject._isComposing) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      };
-
-      const handleKeyUp = function (e) {
-        const activeObject = canvas.getActiveObject();
-        if (
-          !activeObject ||
-          activeObject.type !== "textbox" ||
-          !activeObject.isEditing
-        ) {
-          return;
-        }
-
-        // 키 이벤트 저장 - 한글 조합 완료 감지에 도움
-        activeObject._lastKeyUpEvent = {
-          key: e.key,
-          isComposing: e.isComposing,
-          timestamp: Date.now(),
-        };
-
-        // IME 조합 중이 아닌 일반 키 처리
-        if (e.key !== "Process" && e.key !== "Unidentified" && !e.isComposing) {
-          window.__EDITOR_IME_COMPOSING__ = false;
-
-          // Enter 키 처리 - 편집 종료 대신 줄바꿈만 처리
-          if (e.key === "Enter") {
-            // 메타키(Ctrl, Cmd 등)와 함께 눌렀을 때만 편집 종료
-            if (e.ctrlKey || e.metaKey) {
-              try {
-                // 조합 중이 아닐 때만 편집 종료
-                if (!activeObject._isComposing) {
-                  // 한글 조합 완전히 끝난 후에만 편집 종료
-                  setTimeout(() => {
-                    if (!activeObject._isComposing) {
-                      // 상태 업데이트 후 편집 종료
-                      updateElementProperty(
-                        activeObject.id,
-                        "text",
-                        activeObject.text
-                      );
-                      saveState();
-
-                      try {
-                        activeObject.exitEditing();
-                        canvas.renderAll();
-                      } catch (err) {
-                        console.error("편집 종료 중 오류:", err);
-                      }
-                    }
-                  }, 50);
-                }
-              } catch (err) {
-                console.error("Enter 키 처리 오류:", err);
-              }
-            } else {
-              // 일반 Enter키는 줄바꿈만 처리하고 포커스 유지
-              // 텍스트 내용이 바뀌었으면 업데이트
-              if (activeObject._prevText !== activeObject.text) {
-                updateElementProperty(
-                  activeObject.id,
-                  "text",
-                  activeObject.text
-                );
-
-                // 변경된 텍스트로 이전 텍스트 업데이트
-                activeObject._prevText = activeObject.text;
-                canvas.renderAll();
-              }
-            }
-            return;
-          }
-
-          // 일반 키 입력 시 상태 업데이트
-          if (activeObject._prevText !== activeObject.text) {
-            updateElementProperty(activeObject.id, "text", activeObject.text);
-
-            // 변경된 텍스트로 이전 텍스트 업데이트
-            activeObject._prevText = activeObject.text;
-
-            // 현재 커서 위치 저장
-            if (activeObject.hiddenTextarea) {
-              try {
-                activeObject._savedSelectionStart =
-                  activeObject.hiddenTextarea.selectionStart;
-                activeObject._savedSelectionEnd =
-                  activeObject.hiddenTextarea.selectionEnd;
-              } catch (err) {
-                console.error("커서 위치 저장 오류:", err);
-              }
+            // 배경 이미지가 있으면 중앙 위치로 복원
+            if (oldBackgroundImage) {
+              oldBackgroundImage.left = width / 2;
+              oldBackgroundImage.top = height / 2;
+              fabricCanvasRef.current.backgroundImage = oldBackgroundImage;
             }
 
-            // 캔버스 렌더링
-            canvas.renderAll();
-          }
-          return;
-        }
+            // 요소 다시 렌더링
+            fabricCanvasRef.current.renderAll();
 
-        // IME 이벤트 감지 및 처리
-        if (e.key === "Process" || e.key === "Unidentified" || e.isComposing) {
-          // 이벤트 전파 중지
-          e.stopPropagation();
-
-          // 특수 케이스: IME 입력 중에 선택한 후보 문자 처리
-          if (activeObject._isComposing) {
-            // 입력 처리 지연
+            // 스케일 업데이트 트리거 - 지연 처리로 DOM 업데이트 충돌 방지
             setTimeout(() => {
-              try {
-                // 포커스가 유지되는지 확인
-                if (
-                  activeObject.hiddenTextarea &&
-                  document.activeElement !== activeObject.hiddenTextarea
-                ) {
-                  activeObject.hiddenTextarea.focus();
-                }
-
-                // 렌더링 갱신으로 시각적 업데이트
-                canvas.renderAll();
-              } catch (err) {
-                console.error("IME 키 업 이벤트 처리 오류:", err);
+              if (canvasContainerRef.current) {
+                window.dispatchEvent(new Event("resize"));
               }
-            }, 10);
+            }, 50);
+          } catch (e) {
+            console.log("플랫폼 변경 후 캔버스 업데이트 중 오류(무시됨):", e);
           }
-        } else {
-          // 조합이 끝났을 때 플래그 초기화
-          activeObject._isComposing = false;
-          window.__EDITOR_IME_COMPOSING__ = false;
-
-          // 텍스트 업데이트
-          if (activeObject._prevText !== activeObject.text) {
-            updateElementProperty(activeObject.id, "text", activeObject.text);
-          }
-
-          // 렌더링
-          canvas.renderAll();
-        }
-      };
-
-      // 이벤트 리스너 등록
-      document.addEventListener("keydown", handleKeyDown);
-      document.addEventListener("keyup", handleKeyUp);
-
-      // 전역 변수에 이벤트 핸들러 저장
-      window.__EDITOR_EVENT_HANDLERS__ = {
-        handleKeyDown,
-        handleKeyUp,
-      };
-    } catch (error) {
-      console.error("캔버스 초기화 중 오류:", error);
+        }, 100);
+      } catch (e) {
+        console.log("플랫폼 변경 초기화 중 오류(무시됨):", e);
+      }
     }
+  }, [activePlatformId, canvasReady]);
 
-    // 초기화 후 배경 적용
-    if (background) {
-      console.log("초기화 후 배경 적용 시도:", background.type);
-      const bgTimer = setTimeout(() => {
-        if (fabricCanvasRef.current && isMounted && canvasReady) {
-          applyBackground(background, fabricCanvasRef.current);
-        }
-      }, 100);
-    }
-
-    // 컴포넌트 언마운트 시 캔버스 정리
+  // 컴포넌트 정리 - 캔버스 및 이벤트 리스너 정리
+  useEffect(() => {
     return () => {
+      console.log("Canvas 컴포넌트 언마운트 - 정리 시작");
+
       // DOM 조작 충돌 방지를 위해 정리 작업 지연
-      cleanupTimerRef.current = setTimeout(() => {
+      setTimeout(() => {
         try {
           // 전역 이벤트 리스너 제거
           if (window.__EDITOR_EVENT_HANDLERS__) {
@@ -1066,46 +437,184 @@ export default function Canvas({
             window.__EDITOR_EVENT_HANDLERS__ = null;
           }
 
+          // Fabric 캔버스 인스턴스 정리
           if (fabricCanvasRef.current) {
-            // 이벤트 핸들러 정리
+            // 1. 이벤트 제거
             fabricCanvasRef.current.off();
-            // 모든 객체 제거
-            fabricCanvasRef.current.clear();
-            // Fabric 캔버스 제거
-            fabricCanvasRef.current.dispose();
-            // 참조 제거
-            fabricCanvasRef.current = null;
 
-            // 전역 참조 제거
-            if (window.fabricCanvasInstance) {
-              window.fabricCanvasInstance = null;
+            // 2. 객체 제거
+            fabricCanvasRef.current.clear();
+
+            // 3. DOM 요소 참조 유지하면서 dispose (DOM은 React가 제거하도록 함)
+            const originalEl = fabricCanvasRef.current.lowerCanvasEl;
+            if (originalEl && originalEl.parentNode) {
+              try {
+                // lowerCanvasEl을 일시적으로 null로 설정하여 dispose 중 DOM 조작 방지
+                fabricCanvasRef.current.lowerCanvasEl = null;
+                fabricCanvasRef.current.upperCanvasEl = null;
+                fabricCanvasRef.current.wrapperEl = null;
+                fabricCanvasRef.current.dispose();
+              } catch (e) {
+                console.log("Fabric 캔버스 dispose 중 오류(무시됨):", e);
+              }
+            } else {
+              try {
+                fabricCanvasRef.current.dispose();
+              } catch (e) {
+                console.log("Fabric 캔버스 dispose 중 오류(무시됨):", e);
+              }
             }
-            if (document.__EDITOR_FABRIC_CANVAS__) {
-              document.__EDITOR_FABRIC_CANVAS__ = null;
-            }
+
+            // 참조 정리
+            fabricCanvasRef.current = null;
           }
+
+          // 전역 참조 제거
+          if (window.fabricCanvasInstance) {
+            window.fabricCanvasInstance = null;
+          }
+          if (document.__EDITOR_FABRIC_CANVAS__) {
+            document.__EDITOR_FABRIC_CANVAS__ = null;
+          }
+
+          console.log("Canvas 컴포넌트 정리 완료");
         } catch (e) {
-          console.error("캔버스 정리 중 오류:", e);
+          console.log("캔버스 정리 중 오류(무시됨):", e);
         }
       }, 50);
     };
-  }, [canvasRef, width, height, isMounted, canvasReady]);
+  }, []);
 
-  // 텍스트 편집 상태 확인 유틸리티 함수
-  const isEditingText = () => {
-    // 전역 변수 확인
-    if (window.__EDITOR_TEXT_EDITING__ === true) {
-      return true;
+  // 디바운스된 플랫폼 변경 핸들러
+  const debouncedPlatformChangeHandler = useCallback(
+    (newPlatformId) => {
+      // 이미 동일한 ID로 처리 중이면 무시
+      if (
+        isResizingRef.current &&
+        prevPlatformIdRef.current === newPlatformId
+      ) {
+        console.log("이미 처리 중인 플랫폼 변경 요청(중복):", newPlatformId);
+        return;
+      }
+
+      // 이전 플랫폼 ID와 같으면 불필요한 처리 건너뛰기
+      if (prevPlatformIdRef.current === newPlatformId) {
+        console.log("동일한 플랫폼으로 변경 요청 - 처리 생략:", newPlatformId);
+        return;
+      }
+
+      // 처리 중 플래그 활성화
+      isResizingRef.current = true;
+
+      try {
+        // 변경 횟수 증가 (디버그용)
+        platformChangeCountRef.current += 1;
+        console.log(
+          `플랫폼 변경 #${platformChangeCountRef.current}: ${prevPlatformIdRef.current} → ${newPlatformId}`
+        );
+
+        const { width, height } =
+          SocialMediaLayouts[newPlatformId] || SocialMediaLayouts.instagram;
+
+        // 이전 타이머 취소
+        if (platformChangeTimerRef.current) {
+          clearTimeout(platformChangeTimerRef.current);
+        }
+
+        // 캔버스 준비 안 된 경우 빠르게 처리 종료
+        if (!fabricCanvasRef.current || !canvasReady) {
+          console.log("캔버스 미준비 상태에서 플랫폼 변경 - 상태만 업데이트");
+          prevPlatformIdRef.current = newPlatformId;
+          isResizingRef.current = false;
+          return;
+        }
+
+        // 지연 실행으로 DOM 업데이트 시간 확보
+        platformChangeTimerRef.current = setTimeout(() => {
+          if (!fabricCanvasRef.current || !canvasReady) {
+            prevPlatformIdRef.current = newPlatformId;
+            isResizingRef.current = false;
+            return;
+          }
+
+          try {
+            // 캔버스 DOM 요소 확인
+            if (fabricCanvasRef.current.lowerCanvasEl) {
+              // 배경 이미지 임시 저장
+              const oldBackgroundImage =
+                fabricCanvasRef.current.backgroundImage;
+
+              // 크기 변경
+              fabricCanvasRef.current.setWidth(width);
+              fabricCanvasRef.current.setHeight(height);
+              fabricCanvasRef.current.calcOffset();
+
+              // 배경 복원
+              if (oldBackgroundImage) {
+                oldBackgroundImage.left = width / 2;
+                oldBackgroundImage.top = height / 2;
+                fabricCanvasRef.current.backgroundImage = oldBackgroundImage;
+              }
+
+              // 렌더링
+              fabricCanvasRef.current.renderAll();
+
+              // 완료 로그 (디버그용)
+              console.log(
+                `플랫폼 변경 #${platformChangeCountRef.current} 완료: ${width}x${height}`
+              );
+            }
+          } catch (error) {
+            console.log("정보: 캔버스 크기 조정 실패 (무시됨)");
+          } finally {
+            // 상태 업데이트 및 플래그 초기화
+            prevPlatformIdRef.current = newPlatformId;
+            isResizingRef.current = false;
+
+            // resize 이벤트는 별도 setTimeout으로 분리하여 React 렌더링과 충돌 방지
+            setTimeout(() => {
+              try {
+                if (canvasContainerRef.current) {
+                  window.dispatchEvent(new Event("resize"));
+                }
+              } catch (e) {
+                // 이벤트 에러는 무시
+              }
+            }, 100);
+          }
+        }, 300);
+      } catch (e) {
+        // 오류 발생 시 플래그 초기화
+        prevPlatformIdRef.current = newPlatformId;
+        isResizingRef.current = false;
+      }
+    },
+    [canvasReady]
+  );
+
+  // 플랫폼 변경 감지 및 처리
+  useEffect(() => {
+    // 마운트 시 첫 실행이거나 실제 변경이 없으면 무시
+    if (prevPlatformIdRef.current === activePlatformId) {
+      return;
     }
 
-    // 캔버스 객체 확인
-    if (fabricCanvasRef.current) {
-      const activeObject = fabricCanvasRef.current.getActiveObject();
-      return activeObject?.type === "textbox" && activeObject?.isEditing;
+    // 텍스트 편집 중이면 플랫폼 변경 처리 건너뛰기
+    if (isEditingText()) {
+      prevPlatformIdRef.current = activePlatformId;
+      return;
     }
 
-    return isTextEditing;
-  };
+    // 디바운스 핸들러 호출
+    debouncedPlatformChangeHandler(activePlatformId);
+
+    // 클린업 함수
+    return () => {
+      if (platformChangeTimerRef.current) {
+        clearTimeout(platformChangeTimerRef.current);
+      }
+    };
+  }, [activePlatformId, debouncedPlatformChangeHandler, isEditingText]);
 
   // 캔버스 비어있는지 확인 및 미리보기 상태 추적
   useEffect(() => {
@@ -1131,6 +640,64 @@ export default function Canvas({
     }
   }, [elements, background, isMounted, canvasReady, isPreviewMode]);
 
+  // 캔버스 초기화 실행
+  useEffect(() => {
+    if (!canvasRef.current) return;
+
+    console.log("캔버스 DOM 준비됨, 초기화 시작");
+
+    // 이미 초기화된 캔버스가 있으면 리턴
+    if (fabricCanvasRef.current) {
+      console.log("캔버스가 이미 초기화되어 있음, 건너뜀");
+      return;
+    }
+
+    // 명시적으로 마운트 상태를 먼저 설정
+    setIsMounted(true);
+
+    // 약간의 지연 후 캔버스 초기화 (DOM이 완전히 준비되도록)
+    setTimeout(() => {
+      // 캔버스 초기화
+      const canvas = initializeCanvas();
+
+      if (canvas) {
+        // 이벤트 리스너 설정
+        setupCanvasEventListeners(canvas);
+
+        // 캔버스 크기 변경 적용
+        setTimeout(() => {
+          // 에디터 스토어에 캔버스 설정 - 중복 호출로 확실하게 설정
+          try {
+            useEditorStore.getState().setCanvas(canvas);
+            console.log(
+              "캔버스 스토어 설정 완료",
+              canvas.width,
+              "x",
+              canvas.height
+            );
+
+            // 배경 적용
+            if (background) {
+              applyBackground(background, canvas);
+            }
+
+            // 캔버스 크기 조정 트리거
+            window.dispatchEvent(new Event("resize"));
+
+            // 마지막으로 선택된 플랫폼 ID 초기화
+            prevPlatformIdRef.current = activePlatformId;
+          } catch (e) {
+            console.error("캔버스 스토어 설정 중 오류:", e);
+          }
+        }, 200);
+      }
+    }, 100);
+
+    return () => {
+      // 클린업 로직...
+    };
+  }, [canvasRef.current]); // 캔버스 DOM 참조가 변경될 때만 실행
+
   // 반응형 캔버스 크기 조정
   useEffect(() => {
     // 텍스트 편집 중이면 처리하지 않음
@@ -1144,1163 +711,452 @@ export default function Canvas({
       )
         return;
 
-      // 텍스트 편집 중인 경우 크기 조정 건너뛰기
-      if (isEditingText()) return;
+      try {
+        // 컨테이너 크기 측정
+        const containerWidth = canvasContainerRef.current.clientWidth;
+        const containerHeight = canvasContainerRef.current.clientHeight;
 
-      const containerWidth = canvasContainerRef.current.clientWidth;
-      const containerHeight = canvasContainerRef.current.clientHeight;
+        // 패딩 여백 설정
+        const padding = 20;
+        const availableWidth = containerWidth - padding * 2;
+        const availableHeight = containerHeight - padding * 2;
 
-      const { width, height } =
-        SocialMediaLayouts[activePlatformId] || SocialMediaLayouts.instagram;
+        // 현재 선택된 플랫폼 크기
+        const { width, height } =
+          SocialMediaLayouts[activePlatformId] || SocialMediaLayouts.instagram;
 
-      // 컨테이너에 맞추기 위한 스케일 계산 (패딩 고려)
-      const paddingX = 20; // 좌우 패딩
-      const paddingY = 20; // 상하 패딩
-      const availableWidth = containerWidth - paddingX;
-      const availableHeight = containerHeight - paddingY;
+        // 비율 계산 (가로 세로 비율 유지)
+        let scale;
 
-      // 가로, 세로 비율 유지하면서 최대한 크게 표시
-      let scale = Math.min(
-        availableWidth / width,
-        availableHeight / height,
-        1 // 최대 스케일은 1로 제한 (원본 크기 이상으로 커지지 않도록)
-      );
+        // 수평 및 수직 스케일 계산
+        const scaleX = availableWidth / width;
+        const scaleY = availableHeight / height;
 
-      // 너무 작아지지 않도록 최소 스케일 설정
-      scale = Math.max(scale, 0.3);
+        // 더 작은 스케일 적용하여 컨테이너에 맞추기
+        scale = Math.min(scaleX, scaleY);
 
-      // 이전 scale과 같으면 불필요한 리렌더링 방지
-      if (scale !== canvasScale) {
+        console.log("스케일 계산:", {
+          containerSize: `${containerWidth}x${containerHeight}`,
+          availableSize: `${availableWidth}x${availableHeight}`,
+          platformSize: `${width}x${height}`,
+          scaleX,
+          scaleY,
+          appliedScale: scale,
+        });
+
+        // 스케일 범위 제한
+        const minScale = 0.1;
+        const maxScale = 2.0;
+        scale = Math.max(minScale, Math.min(maxScale, scale));
+
+        // 캔버스 스케일 설정
         setCanvasScale(scale);
 
-        // 캔버스 줌 조정
-        fabricCanvasRef.current.setZoom(scale);
-        fabricCanvasRef.current.setWidth(width * scale);
-        fabricCanvasRef.current.setHeight(height * scale);
-
-        fabricCanvasRef.current.renderAll();
+        // 캔버스 렌더링 갱신
+        setTimeout(() => {
+          if (fabricCanvasRef.current) {
+            fabricCanvasRef.current.renderAll();
+          }
+        }, 50);
+      } catch (err) {
+        console.error("캔버스 크기 조정 중 오류:", err);
       }
     };
 
     // 초기 사이즈 설정
-    if (isMounted && canvasReady) {
-      updateCanvasSize();
+    if (fabricCanvasRef.current && canvasReady) {
+      setTimeout(updateCanvasSize, 100);
     }
 
-    // 리사이즈 이벤트 디바운스 처리
-    let resizeTimer;
-    const handleResize = () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        if (isMounted && canvasReady) {
-          // 텍스트 편집 중인 경우 크기 조정 건너뛰기
-          const activeObject = fabricCanvasRef.current?.getActiveObject();
-          if (activeObject?.type === "textbox" && activeObject?.isEditing) {
-            return;
-          }
-          updateCanvasSize();
-        }
-      }, 100);
-    };
+    // 리사이즈 이벤트 핸들러
+    const handleResize = debounce(() => {
+      if (fabricCanvasRef.current && canvasReady && !isEditingText()) {
+        updateCanvasSize();
+      }
+    }, 200);
 
     window.addEventListener("resize", handleResize);
 
     return () => {
-      clearTimeout(resizeTimer);
       window.removeEventListener("resize", handleResize);
     };
-  }, [activePlatformId, canvasEmpty, canvasScale, isMounted, canvasReady]);
+  }, [activePlatformId, canvasReady, isEditingText]);
 
-  // 플랫폼 변경 시 캔버스 사이즈 조정
-  useEffect(() => {
-    if (!fabricCanvasRef.current || !isMounted || !canvasReady) return;
+  // 캔버스 초기화 함수
+  const initializeCanvas = useCallback(() => {
+    if (!canvasRef.current || fabricCanvasRef.current) return;
 
-    // 텍스트 편집 중이면 처리하지 않음
-    if (isEditingText()) return;
-
-    try {
-      console.log("플랫폼 변경 후 캔버스 크기 조정 시작");
-
-      const { width, height } =
-        SocialMediaLayouts[activePlatformId] || SocialMediaLayouts.instagram;
-
-      // 캔버스 크기 업데이트
-      fabricCanvasRef.current.setWidth(width * canvasScale);
-      fabricCanvasRef.current.setHeight(height * canvasScale);
-
-      fabricCanvasRef.current.renderAll();
-      console.log("플랫폼 변경 후 캔버스 크기 조정 완료");
-    } catch (e) {
-      console.error("캔버스 크기 조정 중 오류:", e);
-    }
-  }, [activePlatformId, canvasScale, isMounted, canvasReady]);
-
-  // 테마 변경 시 캔버스 배경 조정
-  useEffect(() => {
-    if (!fabricCanvasRef.current || !isMounted || !canvasReady) return;
-
-    // 텍스트 편집 중이면 처리하지 않음
-    if (isEditingText()) return;
-
-    // 배경 이미지가 있는 경우 배경색을 변경하지 않음
-    if (fabricCanvasRef.current.backgroundImage) {
-      console.log("테마 변경: 배경 이미지가 존재하여 배경색 변경 생략");
-      return;
-    }
-
-    const bgColor = theme === "dark" ? "#1a1a1a" : "#f5f5f5";
-    console.log("테마 변경으로 배경색 업데이트:", bgColor);
-    fabricCanvasRef.current.set("backgroundColor", bgColor);
-    fabricCanvasRef.current.renderAll();
-  }, [theme, isMounted, canvasReady]);
-
-  // 배경 적용
-  useEffect(() => {
-    if (!fabricCanvasRef.current || !isMounted || !canvasReady) return;
-
-    // 텍스트 편집 중이면 처리하지 않음
-    const textBeingEdited =
-      window.__EDITOR_TEXT_EDITING__ === true ||
-      (fabricCanvasRef.current &&
-        fabricCanvasRef.current.getActiveObject()?.type === "textbox" &&
-        fabricCanvasRef.current.getActiveObject()?.isEditing);
-
-    if (textBeingEdited) return;
-
-    console.log("배경 useEffect 트리거됨:", background?.type);
-
-    if (background) {
-      applyBackground(background, fabricCanvasRef.current);
-    } else {
-      // 배경이 없는 경우 기본 배경 설정
-      fabricCanvasRef.current.set("backgroundColor", "#ffffff");
-      fabricCanvasRef.current.backgroundImage = null;
-      fabricCanvasRef.current.renderAll();
-    }
-  }, [background, isMounted, canvasReady]);
-
-  // 디자인 설정 적용
-  useEffect(() => {
-    if (
-      !fabricCanvasRef.current ||
-      !designSettings ||
-      !isMounted ||
-      !canvasReady
-    )
-      return;
-
-    // 텍스트 편집 중이면 처리하지 않음
-    if (isEditingText()) return;
-
-    // 디자인 설정에 따라 캔버스 속성 변경
-    if (designSettings.backgroundColor) {
-      fabricCanvasRef.current.set(
-        "backgroundColor",
-        designSettings.backgroundColor
-      );
-      fabricCanvasRef.current.renderAll();
-    }
-
-    // 테두리 적용
-    if (designSettings.borderWidth > 0) {
-      // 기존 테두리 제거
-      const existingBorder = fabricCanvasRef.current
-        .getObjects()
-        .find((obj) => obj.id === "canvas-border");
-      if (existingBorder) {
-        fabricCanvasRef.current.remove(existingBorder);
-      }
-
-      // 새 테두리 추가
-      const border = new Rect({
-        id: "canvas-border",
-        width: fabricCanvasRef.current.width,
-        height: fabricCanvasRef.current.height,
-        fill: "transparent",
-        stroke: designSettings.borderColor || "#000000",
-        strokeWidth: designSettings.borderWidth,
-        selectable: false,
-        evented: false,
-        hoverCursor: "default",
-        type: "border", // 타입 추가
-      });
-
-      // 테두리를 맨 뒤로 보내기
-      fabricCanvasRef.current.add(border);
-      try {
-        if (typeof border.sendToBack === "function") {
-          border.sendToBack();
-        } else if (typeof fabricCanvasRef.current.sendToBack === "function") {
-          fabricCanvasRef.current.sendToBack(border);
-        } else if (typeof fabricCanvasRef.current.moveTo === "function") {
-          fabricCanvasRef.current.moveTo(border, 0);
-        }
-      } catch (err) {
-        console.log("테두리 배치 중 오류, 무시됨", err);
-      }
-      fabricCanvasRef.current.renderAll();
-    } else {
-      // 테두리 제거
-      const existingBorder = fabricCanvasRef.current
-        .getObjects()
-        .find((obj) => obj.id === "canvas-border");
-      if (existingBorder) {
-        fabricCanvasRef.current.remove(existingBorder);
-        fabricCanvasRef.current.renderAll();
-      }
-    }
-  }, [designSettings, isMounted, canvasReady]);
-
-  // 요소들을 캔버스에 렌더링
-  useEffect(() => {
-    if (!fabricCanvasRef.current || !isMounted || !canvasReady) return;
-
-    // 텍스트 편집 중이면 처리하지 않음
-    if (isEditingText()) return;
-
-    // 드로잉 모드 비활성화 확인
-    if (fabricCanvasRef.current.isDrawingMode) {
-      fabricCanvasRef.current.isDrawingMode = false;
-      setIsDrawMode(false);
-    }
+    console.log("캔버스 초기화 시작");
 
     try {
-      console.log(
-        "요소 렌더링 시작, 요소 수:",
-        elements.length,
-        "배경:",
-        background?.type
-      );
-      const canvas = fabricCanvasRef.current;
-
-      // 텍스트 편집 중인 객체 ID 찾기
-      const editingTextId = (() => {
-        const activeObject = canvas.getActiveObject();
-        if (activeObject?.type === "textbox" && activeObject?.isEditing) {
-          return activeObject.id;
-        }
-        return null;
-      })();
-
-      // 이전 객체 제거 (텍스트 편집 중인 객체, 그리드, 가이드 제외)
-      canvas.getObjects().forEach((obj) => {
-        if (
-          obj.id &&
-          obj.id !== "canvas-border" &&
-          !obj.id.startsWith("grid-") &&
-          obj.id !== "guide-text" &&
-          obj.id !== "drop-icon" &&
-          obj.id !== editingTextId
-        ) {
-          canvas.remove(obj);
-        }
+      // Fabric 캔버스 생성
+      const newCanvas = new FabricCanvas(canvasRef.current, {
+        width: width,
+        height: height,
+        backgroundColor: backgroundColor,
+        preserveObjectStacking: true,
+        selection: true,
+        stopContextMenu: true,
+        fireRightClick: true,
+        enableRetinaScaling: true,
+        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
       });
 
-      // 먼저 비-텍스트 요소들을 캔버스에 추가
-      elements.forEach((element) => {
-        // 편집 중인 텍스트는 건너뛰기 (이미 존재)
-        if (element.id === editingTextId) return;
+      // 캔버스 설정
+      newCanvas.selection = true;
+      newCanvas.uniformScaling = false;
+      newCanvas.centeredScaling = true;
+      newCanvas.centeredRotation = true;
 
-        // 텍스트가 아닌 요소만 먼저 추가
-        if (element.type !== "text") {
-          switch (element.type) {
-            case "image":
-              FabricImage.fromURL(
-                element.src,
-                (img) => {
-                  img.set({
-                    id: element.id,
-                    left: element.x,
-                    top: element.y,
-                    angle: element.rotation || 0,
-                    opacity:
-                      element.opacity !== undefined ? element.opacity : 1,
-                    scaleX: element.scaleX || 1,
-                    scaleY: element.scaleY || 1,
-                    customType: "image",
-                    setSrc: element.src, // 원본 src 저장
-                  });
-                  canvas.add(img);
-                  canvas.renderAll();
-                },
-                { crossOrigin: "anonymous" }
-              );
-              break;
+      // 브러시 설정
+      safeSetBrushProperty(newCanvas, "width", strokeWidth);
+      safeSetBrushProperty(newCanvas, "color", strokeColor);
 
-            case "shape":
-              let shapeObj;
+      // 캔버스 인스턴스 저장
+      fabricCanvasRef.current = newCanvas;
+      setCanvas(newCanvas);
 
-              if (element.shape === "rectangle") {
-                shapeObj = new Rect({
-                  width: element.width,
-                  height: element.height,
-                });
-              } else if (element.shape === "circle") {
-                shapeObj = new Circle({
-                  radius: Math.min(element.width, element.height) / 2,
-                });
-              } else if (element.shape === "triangle") {
-                shapeObj = new Triangle({
-                  width: element.width,
-                  height: element.height,
-                });
-              }
+      // 전역 참조 설정
+      window.fabricCanvasInstance = newCanvas;
+      document.__EDITOR_FABRIC_CANVAS__ = newCanvas;
 
-              if (shapeObj) {
-                shapeObj.set({
-                  id: element.id,
-                  left: element.x,
-                  top: element.y,
-                  fill: element.backgroundColor || "#3b82f6",
-                  stroke: element.borderColor || "#1d4ed8",
-                  strokeWidth: element.borderWidth || 0,
-                  angle: element.rotation || 0,
-                  scaleX: element.scaleX || 1,
-                  scaleY: element.scaleY || 1,
-                  opacity: element.opacity !== undefined ? element.opacity : 1,
-                  customType: "shape",
-                  shape: element.shape,
-                });
-                canvas.add(shapeObj);
-              }
-              break;
-          }
-        }
-      });
+      // 에디터 스토어에 캔버스 설정 - 이 부분이 중요함
+      useEditorStore.getState().setCanvas(newCanvas);
 
-      // 그 다음 텍스트 요소들을 추가 (최상위 레이어에 위치하도록)
-      elements.forEach((element) => {
-        // 편집 중인 텍스트는 건너뛰기 (이미 존재)
-        if (element.id === editingTextId) return;
+      // 캔버스 상태 업데이트
+      setCanvasReady(true);
+      setIsMounted(true);
 
-        // 텍스트 요소만 처리
-        if (element.type === "text") {
-          try {
-            const textbox = new Textbox(element.text || "텍스트를 입력하세요", {
-              id: element.id,
-              left: element.x,
-              top: element.y,
-              width: element.width || 200,
-              fontSize: element.fontSize || 24,
-              fontFamily: element.fontFamily || "Arial",
-              fill: element.fill || "#000000",
-              stroke: element.stroke,
-              strokeWidth: element.strokeWidth || 0,
-              textAlign: element.textAlign || "left",
-              fontWeight: element.fontWeight,
-              fontStyle: element.fontStyle,
-              angle: element.rotation || 0,
-              scaleX: element.scaleX || 1,
-              scaleY: element.scaleY || 1,
-              opacity: element.opacity !== undefined ? element.opacity : 1,
-              customType: "text",
-              selectable: true,
-              editable: true,
-              hasControls: true,
-              hasBorders: true,
-              perPixelTargetFind: false,
-              hoverCursor: "text",
-              borderColor: "#0084ff",
-              cornerColor: "#0084ff",
-              cornerSize: 8,
-              transparentCorners: false,
-              lockUniScaling: false,
-              originX: "left",
-              originY: "top",
-              padding: 7,
-              snapAngle: 45,
-              splitByGrapheme: false, // 한글 입력을 위한 설정
-              lockMovementX: false,
-              lockMovementY: false,
-              hasRotatingPoint: true,
-              centeredRotation: true,
-              charSpacing: 0,
-              lineHeight: 1.2,
-              erasable: false,
-              dirty: true,
-              __corner: 0,
-              // 텍스트 렌더링 품질 개선 설정
-              objectCaching: false, // 움직일 때 해상도 유지를 위해 캐싱 비활성화
-              cacheProperties: [
-                "fill",
-                "stroke",
-                "strokeWidth",
-                "width",
-                "height",
-                "strokeDashArray",
-                "strokeLineCap",
-                "strokeDashOffset",
-                "strokeLineJoin",
-                "strokeMiterLimit",
-                "fontSize",
-                "fontWeight",
-                "fontFamily",
-                "fontStyle",
-                "lineHeight",
-                "underline",
-                "overline",
-                "linethrough",
-                "textAlign",
-                "text",
-                "charSpacing",
-                "styles",
-                "direction",
-                "path",
-                "pathStartOffset",
-                "pathSide",
-              ],
-              noScaleCache: true, // 스케일링 시 캐시 사용 비활성화
-              // 텍스트 렌더링 안티앨리어싱 개선 설정
-              statefullCache: true,
-              strokeUniform: true,
-              miterLimit: 10, // 텍스트 모서리 부드럽게 처리
-              paintFirst: "fill",
-              shadow: null, // 그림자 효과 제거 (텍스트 선명도 향상)
-              textRendering: "optimizeLegibility", // 텍스트 렌더링 최적화
-              moveCursor: "text", // 이동 시 커서 스타일
-            });
-
-            // 텍스트 요소를 캔버스에 추가
-            canvas.add(textbox);
-
-            // 텍스트 요소를 다른 요소보다 앞으로 배치
-            if (typeof canvas.bringObjectToFront === "function") {
-              canvas.bringObjectToFront(textbox);
-            } else if (typeof canvas.bringForward === "function") {
-              canvas.bringForward(textbox, true);
-            }
-
-            // 선택된 요소인 경우 자동으로 선택 상태로 설정
-            if (element.id === selectedElementId) {
-              setTimeout(() => {
-                canvas.setActiveObject(textbox);
-                canvas.renderAll();
-              }, 50);
-            }
-          } catch (err) {
-            console.error("텍스트 요소 생성 중 오류:", err);
-          }
-        }
-      });
-
-      // 캔버스 렌더링
-      canvas.renderAll();
-      console.log("요소 렌더링 완료");
-    } catch (e) {
-      console.error("요소 렌더링 중 오류:", e);
-    }
-  }, [elements, isMounted, canvasReady, background]);
-
-  // canvas와 필요한 메소들을 부모에게 전달
-  useEffect(() => {
-    if (fabricCanvasRef.current && setCanvasRef) {
-      const canvasInstance = fabricCanvasRef.current;
-
-      setCanvasRef({
-        canvas: canvasInstance,
-        setCanvasImage,
-        exportToImage: () => {
-          try {
-            if (!canvasInstance) return null;
-            return canvasInstance.toDataURL({
-              format: "png",
-              quality: 1.0,
-              multiplier: Math.max(window.devicePixelRatio || 1, 4), // 해상도를 4배로 증가
-              enableRetinaScaling: true,
-            });
-          } catch (error) {
-            console.error("Canvas export error:", error);
-            return null;
-          }
-        },
-        deleteSelectedObject: () => {
-          try {
-            if (!canvasInstance) return;
-            const activeObject = canvasInstance.getActiveObject();
-            if (activeObject) {
-              canvasInstance.remove(activeObject);
-              canvasInstance.renderAll();
-              // 요소 상태도 함께 업데이트
-              if (activeObject.id && typeof removeElement === "function") {
-                removeElement(activeObject.id);
-              }
-            }
-          } catch (error) {
-            console.error("Delete object error:", error);
-          }
-        },
-        clear: () => {
-          try {
-            if (!canvasInstance) return;
-            // 모든 객체 제거
-            canvasInstance.getObjects().forEach((obj) => {
-              if (obj.id !== "canvas-border" && obj.type !== "border") {
-                canvasInstance.remove(obj);
-              }
-            });
-            canvasInstance.renderAll();
-          } catch (error) {
-            console.error("Canvas clear error:", error);
-          }
-        },
-      });
-    }
-  }, [setCanvasRef, setCanvasImage, removeElement]);
-
-  // 드로잉 모드 변경 감지 및 처리
-  useEffect(() => {
-    if (!fabricCanvasRef.current || !canvasReady) return;
-
-    const canvas = fabricCanvasRef.current;
-
-    try {
-      // 드로잉 모드 상태에 따라 캔버스 속성 업데이트
-      canvas.isDrawingMode = isDrawMode;
-
-      // 드로잉 모드 활성화 시 브러시 속성 초기화
-      if (isDrawMode) {
-        // 브러시가 없는 경우 생성 보장
-        if (!canvas.freeDrawingBrush) {
-          console.log("드로잉 모드 활성화: 브러시 초기화");
-          // 브러시가 생성될 때까지 약간 대기
-          setTimeout(() => {
-            if (canvas.freeDrawingBrush) {
-              // 브러시 속성 설정
-              safeSetBrushProperty(canvas, "color", strokeColor);
-              safeSetBrushProperty(canvas, "width", strokeWidth);
-            }
-          }, 50);
-        } else {
-          // 브러시가 이미 존재하는 경우 속성 직접 설정
-          safeSetBrushProperty(canvas, "color", strokeColor);
-          safeSetBrushProperty(canvas, "width", strokeWidth);
-        }
-
-        // 객체 선택 불가 설정
-        canvas.selection = false;
-        canvas.forEachObject((obj) => {
-          obj.selectable = false;
-          obj.evented = false;
-        });
-      } else {
-        // 드로잉 모드 비활성화 시 객체 선택 가능하게 설정
-        canvas.selection = true;
-        canvas.forEachObject((obj) => {
-          if (obj.id !== "canvas-border" && obj.type !== "border") {
-            obj.selectable = true;
-            obj.evented = true;
-          }
-        });
+      // 콜백 실행
+      if (onCanvasReady && typeof onCanvasReady === "function") {
+        onCanvasReady(newCanvas);
       }
 
-      // 캔버스 다시 렌더링
-      canvas.requestRenderAll();
-    } catch (e) {
-      console.error("드로잉 모드 설정 중 오류:", e);
-    }
-  }, [isDrawMode, strokeColor, strokeWidth, canvasReady]);
-
-  // 브러시 속성 변경 감지 및 처리
-  useEffect(() => {
-    if (!fabricCanvasRef.current || !canvasReady) return;
-
-    // 드로잉 모드가 활성화된 경우에만 처리
-    if (isDrawMode) {
-      try {
-        // 브러시 색상 및 굵기 업데이트
-        safeSetBrushProperty(fabricCanvasRef.current, "color", strokeColor);
-        safeSetBrushProperty(fabricCanvasRef.current, "width", strokeWidth);
-      } catch (e) {
-        console.error("브러시 속성 업데이트 중 오류:", e);
-      }
-    }
-  }, [strokeColor, strokeWidth, isDrawMode, canvasReady]);
-
-  // 객체 변경 이벤트 핸들러
-  const handleObjectChange = (e) => {
-    try {
-      if (!fabricCanvasRef.current) return;
-
-      console.log("Canvas: handleObjectChange 호출됨", {
-        eventType: e.type,
-        target: e.target
-          ? {
-              type: e.target.type,
-              id: e.target.id,
-              customType: e.target.customType,
-              selectable: e.target.selectable,
-            }
-          : "없음",
-        selected: e.selected
-          ? e.selected.map((obj) => ({
-              type: obj.type,
-              id: obj.id,
-              customType: obj.customType,
-            }))
-          : "없음",
-      });
-
-      // 이벤트 타입에 따른 처리
-      if (e.type === "textEditing") {
-        // 텍스트 편집 시작 시
-        if (onTextEdit && typeof onTextEdit === "function") {
-          onTextEdit(true);
-        }
-        if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
-          setShowTextToolbar(true);
-        }
-
-        // 텍스트 편집 중인 객체 앞으로 가져오기
-        if (e.target) {
-          fabricCanvasRef.current.bringObjectToFront(e.target);
-          fabricCanvasRef.current.renderAll();
-        }
-      } else if (
-        e.target &&
-        (e.target.type === "textbox" || e.target.type === "i-text")
-      ) {
-        console.log("Canvas: 텍스트 요소 선택됨", e.target.id);
-        // 텍스트 요소 선택 시
-        if (onSetEditMode) {
-          onSetEditMode("text");
-        }
-        if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
-          setShowTextToolbar(true);
-        }
-
-        // 선택된 텍스트 객체 ID 상태 업데이트
-        setSelectedElementId(e.target.id);
-
-        // 선택된 텍스트 객체 앞으로 가져오기
-        fabricCanvasRef.current.bringObjectToFront(e.target);
-        fabricCanvasRef.current.renderAll();
-      } else if (e.target && e.target.customType === "image") {
-        // 이미지 요소 선택 시
-        if (onSetEditMode) {
-          onSetEditMode("image");
-        }
-        if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
-          setShowTextToolbar(false);
-        }
-
-        // 선택된 이미지 객체 ID 상태 업데이트
-        setSelectedElementId(e.target.id);
-      } else if (e.target && e.target.type === "rect") {
-        // 사각형 요소 선택 시
-        if (onSetEditMode) {
-          onSetEditMode("shape");
-        }
-        if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
-          setShowTextToolbar(false);
-        }
-
-        // 선택된 도형 객체 ID 상태 업데이트
-        setSelectedElementId(e.target.id);
-      } else if (
-        e.target &&
-        (e.target.type === "circle" || e.target.type === "triangle")
-      ) {
-        // 기타 도형 요소 선택 시
-        if (onSetEditMode) {
-          onSetEditMode("shape");
-        }
-        if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
-          setShowTextToolbar(false);
-        }
-
-        // 선택된 도형 객체 ID 상태 업데이트
-        setSelectedElementId(e.target.id);
-      } else if (e.selected && e.selected.length > 1) {
-        console.log(
-          "Canvas: 다중 요소 선택됨",
-          e.selected.map((obj) => obj.id)
-        );
-        // 다중 요소 선택 시
-        if (onSetEditMode) {
-          onSetEditMode("group");
-        }
-        if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
-          setShowTextToolbar(false);
-        }
-
-        // 다중 선택 시 선택 ID는 null로 설정 (그룹 선택 상태)
-        setSelectedElementId(null);
-      } else {
-        console.log("Canvas: 선택 해제 또는 기타 상황");
-        // 선택 해제 시
-        if (onSetEditMode) {
-          onSetEditMode(null);
-        }
-        if (setShowTextToolbar && typeof setShowTextToolbar === "function") {
-          setShowTextToolbar(false);
-        }
-
-        // 선택 해제 시 선택 ID도 초기화
-        setSelectedElementId(null);
+      // 캔버스 참조 전달
+      if (setCanvasRef && typeof setCanvasRef === "function") {
+        setCanvasRef(newCanvas);
       }
 
-      // 선택된 객체들 정보 콜백
-      if (onObjectsSelected && typeof onObjectsSelected === "function") {
-        try {
-          // 텍스트 편집 중이면 편집 중인 상태 정보 전달
-          if (e.type === "textEditing") {
-            const activeObj = fabricCanvasRef.current?.getActiveObject();
-            if (
-              activeObj &&
-              (activeObj.type === "textbox" || activeObj.type === "i-text")
-            ) {
-              onObjectsSelected([activeObj], "editing");
-            }
-          }
-          // 일반 선택 시 객체 정보 전달
-          else if (e.selected) {
-            onObjectsSelected(e.selected, "selected");
-          }
-          // 단일 객체 선택 시
-          else if (e.target) {
-            onObjectsSelected([e.target], "selected");
-          }
-          // 선택 해제 시
-          else {
-            onObjectsSelected([], "none");
-          }
-        } catch (err) {
-          console.error("객체 선택 정보 전달 중 오류:", err);
-        }
-      }
+      console.log("캔버스 초기화 완료", { width, height });
+      return newCanvas;
     } catch (error) {
-      console.error("객체 변경 이벤트 처리 중 오류:", error);
+      console.error("캔버스 초기화 오류:", error);
+      return null;
     }
-  };
+  }, [
+    width,
+    height,
+    backgroundColor,
+    strokeWidth,
+    strokeColor,
+    onCanvasReady,
+    setCanvasRef,
+  ]);
 
-  // 선택한 요소에 배경 이미지 적용하는 함수
-  const applyBackgroundToElement = (element, background, canvas) => {
-    if (!canvas || !background || !element) return;
+  // 배경 적용 함수
+  const applyBackground = useCallback(
+    (background, targetCanvas = null) => {
+      const canvas = targetCanvas || fabricCanvasRef.current;
 
-    try {
-      console.log(
-        "요소에 배경 적용 시작:",
-        background.type,
-        "요소 ID:",
-        element.id
-      );
-
-      const activeObject = canvas
-        .getObjects()
-        .find((obj) => obj.id === element.id);
-      if (!activeObject) {
-        console.error("선택한 요소를 찾을 수 없습니다.");
+      if (!canvas) {
+        console.error("배경 적용 실패: 캔버스가 존재하지 않음");
         return;
       }
 
-      if (background.type === "color") {
-        // 색상 배경인 경우 요소의 배경색 변경
-        activeObject.set("fill", background.value);
-        canvas.renderAll();
-        console.log("요소에 배경색 적용 완료");
-      } else if (background.type === "image" && background.value) {
-        // 이미지 배경인 경우 패턴 생성 후 적용
-        const img = new Image();
-        img.crossOrigin = "anonymous";
+      console.log("배경 적용 시작:", background?.type, background);
 
-        img.onload = function () {
-          console.log(
-            "요소 배경 이미지 로드 성공:",
-            img.width,
-            "x",
-            img.height
-          );
-
-          try {
-            // FabricImage 생성
-            const fabricImage = new FabricImage(img);
-
-            // 패턴 생성
-            const pattern = new Pattern({
-              source: img,
-              repeat: "no-repeat",
-            });
-
-            // 요소의 크기
-            const objectWidth = activeObject.width * activeObject.scaleX;
-            const objectHeight = activeObject.height * activeObject.scaleY;
-
-            // 캔버스와 이미지 비율 계산
-            const objectRatio = objectWidth / objectHeight;
-            const imgRatio = img.width / img.height;
-
-            console.log("=== 이미지 크기 디버깅 ===");
-            console.log("원본 이미지 크기:", img.width, "x", img.height);
-            console.log("캔버스 크기:", objectWidth, "x", objectHeight);
-
-            // 가로와 세로 중 더 큰 비율을 사용하여 캔버스를 완전히 채움
-            const scaleToWidth = objectWidth / img.width;
-            const scaleToHeight = objectHeight / img.height;
-            let scaleX, scaleY;
-            scaleX = Math.max(scaleToWidth, scaleToHeight);
-            scaleY = scaleX; // 비율 유지
-
-            console.log("계산된 스케일 - X:", scaleX, "Y:", scaleY);
-
-            // 추가 확대 적용
-            const extraScale = 1.0; // 추가 확대 없이 원본 비율 유지
-            scaleX *= extraScale;
-            scaleY *= extraScale;
-
-            console.log(
-              "최종 스케일 (extraScale 적용 후) - X:",
-              scaleX,
-              "Y:",
-              scaleY
-            );
-            console.log(
-              "최종 이미지 크기:",
-              img.width * scaleX,
-              "x",
-              img.height * scaleY
-            );
-
-            // 패턴 스케일 및 오프셋 설정
-            pattern.scaleX = scaleX / activeObject.scaleX;
-            pattern.scaleY = scaleY / activeObject.scaleY;
-            pattern.offsetX = objectWidth / 2;
-            pattern.offsetY = objectHeight / 2;
-
-            // 요소에 패턴 적용
-            activeObject.set("fill", pattern);
-
-            // 요소의 clipPath 제거하여 이미지가 잘리지 않도록 함
-            activeObject.clipPath = null;
-
-            // 캔버스 렌더링
-            canvas.renderAll();
-            console.log("요소에 배경 이미지 적용 완료");
-
-            // 상태 업데이트
-            updateElement({
-              ...element,
-              fill: pattern,
-              backgroundImage: background.value,
-            });
-          } catch (err) {
-            console.error("요소 배경 이미지 설정 중 오류:", err);
-          }
-        };
-
-        img.onerror = function (err) {
-          console.error("요소 배경 이미지 로드 실패:", err);
-        };
-
-        img.src = background.value;
-      }
-    } catch (e) {
-      console.error("요소에 배경 적용 중 오류:", e);
-    }
-  };
-
-  // 기존 배경 적용 함수 (전체 캔버스에 적용)
-  const applyBackground = (background, canvas) => {
-    if (!canvas || !background) return;
-
-    try {
-      console.log("배경 적용 시작:", background.type);
-
-      // 선택된 요소가 있는지 확인
-      const activeObject = canvas.getActiveObject();
-      if (activeObject && selectedElementId) {
-        // 선택된 요소가 있으면 해당 요소에 배경 적용
-        const selectedElement = elements.find(
-          (el) => el.id === selectedElementId
-        );
-        if (selectedElement) {
-          applyBackgroundToElement(selectedElement, background, canvas);
-          return;
-        }
+      // 캔버스 확인 및 메서드 검증
+      if (!canvas.renderAll || typeof canvas.renderAll !== "function") {
+        console.error("캔버스 인스턴스가 올바르지 않음: renderAll 메서드 없음");
+        return;
       }
 
-      // 선택된 요소가 없으면 캔버스 전체에 배경 적용
-      if (background.type === "color") {
-        console.log("배경 색상 적용:", background.value);
-
-        // 배경색 적용
-        canvas.set("backgroundColor", background.value);
-
-        // 배경 이미지가 있다면 제거
-        canvas.backgroundImage = null;
-
-        // 캔버스 렌더링
+      // 배경 객체가 없거나 타입이 없는 경우
+      if (!background || !background.type) {
+        canvas.backgroundColor = "#ffffff";
         canvas.renderAll();
-        console.log("배경색 적용 완료");
-      } else if (background.type === "image" && background.value) {
-        console.log("배경 이미지 적용 시도:", typeof background.value);
+        return;
+      }
 
-        // 기본 배경색 설정 (이미지 로딩 전)
-        canvas.set("backgroundColor", "#ffffff");
+      // 배경 색상 적용
+      if (background.type === "color") {
+        canvas.backgroundColor = background.value || "#ffffff";
+        canvas.renderAll();
+        console.log("배경 색상 적용 완료:", background.value);
+        setCanvasEmpty(false);
+        return;
+      }
+
+      // 배경 이미지 적용
+      if (background.type === "image" && background.url) {
+        console.log("배경 이미지 적용 시작:", background.url);
 
         try {
-          console.log("배경 이미지 설정 - 직접 방식 사용");
-          // setBackgroundImage 대신 직접 이미지 객체 생성 후 설정
-          const img = new Image();
-          img.crossOrigin = "anonymous";
+          // 실제 객체로 이미지 먼저 로드
+          const imgElement = new Image();
+          imgElement.crossOrigin = "anonymous";
 
-          img.onload = function () {
+          imgElement.onload = function () {
+            console.log(
+              "원본 이미지 로드 성공:",
+              imgElement.width,
+              "x",
+              imgElement.height
+            );
+
             try {
-              // 캔버스 크기
-              const canvasWidth = canvas.width;
-              const canvasHeight = canvas.height;
+              // 캔버스 크기 가져오기
+              const canvasWidth = canvas.width || width;
+              const canvasHeight = canvas.height || height;
 
-              console.log("=== 이미지 크기 디버깅 ===");
-              console.log("원본 이미지 크기:", img.width, "x", img.height);
-              console.log("캔버스 크기:", canvasWidth, "x", canvasHeight);
+              // FabricImage 객체 직접 생성
+              const fabricImg = new FabricImage(imgElement);
 
-              // 캔버스와 이미지 비율 계산
-              const canvasRatio = canvasWidth / canvasHeight;
-              const imgRatio = img.width / img.height;
-
-              console.log("비율 - 캔버스:", canvasRatio, "이미지:", imgRatio);
-
-              // 이미지 객체 생성
-              const fabricImage = new FabricImage(img);
-
-              // 이미지를 캔버스에 꽉 차게 표시 (CSS의 cover 방식)
-              let scaleX, scaleY;
-
-              // 항상 캔버스 너비에 맞추어 스케일 계산
-              scaleX = canvasWidth / img.width;
-              scaleY = scaleX; // 비율 유지
-
-              console.log("계산된 스케일 - X:", scaleX, "Y:", scaleY);
-
-              // 추가 확대 적용
-              const extraScale = 1.5; // 50% 추가 확대로 여백 없이 채움
-              scaleX *= extraScale;
-              scaleY *= extraScale;
-
-              console.log(
-                "최종 스케일 (extraScale 적용 후) - X:",
-                scaleX,
-                "Y:",
-                scaleY
-              );
-              console.log(
-                "최종 이미지 크기:",
-                img.width * scaleX,
-                "x",
-                img.height * scaleY
-              );
-
-              // 배경 이미지 속성 설정
-              fabricImage.set({
+              // 이미지 속성 설정
+              fabricImg.set({
                 originX: "center",
                 originY: "center",
                 left: canvasWidth / 2,
                 top: canvasHeight / 2,
-                scaleX: scaleX,
-                scaleY: scaleY,
-                selectable: false,
-                evented: false,
               });
 
-              // clipPath 제거하여 배경 이미지가 캔버스 경계에 제한되지 않도록 함
-              canvas.clipPath = null;
+              // 이미지 크기 조정 (캔버스를 채우도록)
+              const scaleX = canvasWidth / imgElement.width;
+              const scaleY = canvasHeight / imgElement.height;
+              const scale = Math.max(scaleX, scaleY); // 더 큰 스케일 선택하여 캔버스 전체 채우기
 
-              // 배경 이미지로 직접 설정
-              canvas.backgroundImage = fabricImage;
+              fabricImg.scale(scale);
 
-              // 배경 이미지의 위치를 오른쪽으로 조정
-              canvas.backgroundImage.left = canvasWidth / 2 + 100; // 오른쪽으로 100px 이동
-              canvas.backgroundImage.top = canvasHeight / 2 + 20;
-              canvas.backgroundImage.originX = "center";
-              canvas.backgroundImage.originY = "center";
+              console.log("이미지 스케일링:", {
+                canvasSize: `${canvasWidth}x${canvasHeight}`,
+                imageSize: `${imgElement.width}x${imgElement.height}`,
+                scale: scale,
+              });
 
-              console.log("=== 이미지 설정 완료 ===");
-              console.log(
-                "최종 배경 이미지 위치:",
-                canvas.backgroundImage.left,
-                "x",
-                canvas.backgroundImage.top
-              );
-              console.log(
-                "최종 배경 이미지 크기:",
-                canvas.backgroundImage.width * canvas.backgroundImage.scaleX,
-                "x",
-                canvas.backgroundImage.height * canvas.backgroundImage.scaleY
-              );
+              // 캔버스에 이미지 설정 (backgroundImage 속성 직접 설정)
+              canvas.backgroundImage = fabricImg;
 
+              // 캔버스 강제 다시 그리기
               canvas.renderAll();
-            } catch (innerErr) {
-              console.error("배경 이미지 설정 중 오류:", innerErr);
-              canvas.set("backgroundColor", "#f5f5f5");
-              canvas.renderAll();
+
+              console.log("배경 이미지 적용 성공");
+              setCanvasEmpty(false);
+            } catch (err) {
+              console.error("이미지 객체 설정 중 오류:", err);
+              fallbackToWhiteBackground(canvas);
             }
           };
 
-          img.onerror = function (err) {
+          imgElement.onerror = function (err) {
             console.error("이미지 로드 실패:", err);
-            canvas.set("backgroundColor", "#f5f5f5");
-            canvas.renderAll();
+            fallbackToWhiteBackground(canvas);
           };
 
-          img.src = background.value;
+          // 이미지 로드 시작
+          imgElement.src = background.url;
+          console.log("이미지 로드 요청됨:", background.url);
         } catch (err) {
-          console.error("배경 이미지 초기화 실패:", err);
-
-          // 기본 배경색으로 대체
-          canvas.set("backgroundColor", "#f5f5f5");
-          canvas.renderAll();
+          console.error("배경 이미지 프로세스 오류:", err);
+          fallbackToWhiteBackground(canvas);
         }
+
+        return;
       }
-    } catch (e) {
-      console.error("배경 적용 중 오류:", e);
-      if (canvas) {
-        canvas.set("backgroundColor", "#f0f0f0");
-        canvas.renderAll();
-      }
+
+      // 기본 흰색 배경 적용
+      fallbackToWhiteBackground(canvas);
+    },
+    [width, height]
+  );
+
+  // 흰색 배경 적용 헬퍼 함수
+  const fallbackToWhiteBackground = (canvas) => {
+    if (!canvas) return;
+
+    try {
+      canvas.backgroundColor = "#ffffff";
+      canvas.renderAll();
+      console.log("기본 흰색 배경으로 대체");
+    } catch (err) {
+      console.error("기본 배경 적용 오류:", err);
     }
   };
 
-  useEffect(() => {
-    if (!canvas) return;
+  // 캔버스 이벤트 리스너 설정 - 순서 변경: 위로 이동
+  const setupCanvasEventListeners = useCallback(
+    (canvas) => {
+      if (!canvas) return;
 
-    canvas.on("mouse:down", (e) => {
-      if (e.target && e.target.customType === "text") {
-        // 선택된 객체가 텍스트인 경우 selectedElementId 업데이트
-        setSelectedElementId(e.target.id);
-      }
-    });
+      // 마우스 이벤트
+      canvas.on("mouse:down", (e) => {
+        if (!e.target) return;
 
-    canvas.on("text:changed", (e) => {
-      if (e.target) {
-        const updatedText = e.target.text;
-        // 텍스트 변경 시 상태 업데이트
-        updateElement(e.target.id, { text: updatedText });
-      }
-    });
+        console.log("Canvas: 객체 선택", e.target.type);
 
-    canvas.on("object:modified", (e) => {
-      if (e.target && e.target.customType === "text") {
-        const obj = e.target;
-        // 위치, 크기 등이 변경되었을 때 상태 업데이트
-        updateElement(obj.id, {
-          x: obj.left,
-          y: obj.top,
-          width: obj.width * obj.scaleX,
-          scaleX: obj.scaleX,
-          scaleY: obj.scaleY,
-          rotation: obj.angle,
-        });
-      }
-    });
-
-    return () => {
-      canvas.off("mouse:down");
-      canvas.off("text:changed");
-      canvas.off("object:modified");
-    };
-  }, [canvas]);
-
-  useEffect(() => {
-    if (fabricCanvasRef.current && onCanvasReady) {
-      onCanvasReady(fabricCanvasRef.current);
-
-      // 추가: 드로잉 모드 비활성화 보장
-      if (fabricCanvasRef.current.isDrawingMode) {
-        fabricCanvasRef.current.isDrawingMode = false;
-        setIsDrawMode(false);
-        console.log("onCanvasReady에서 드로잉 모드 비활성화");
-      }
-    }
-  }, [fabricCanvasRef.current, onCanvasReady]);
-
-  // 초기화 시 그리기 모드 비활성화 보장
-  useEffect(() => {
-    // isDrawMode 상태를 false로 설정
-    setIsDrawMode(false);
-
-    if (fabricCanvasRef.current) {
-      // 캔버스의 drawing mode 비활성화
-      fabricCanvasRef.current.isDrawingMode = false;
-
-      // 모든 객체를 선택 가능하도록 설정
-      fabricCanvasRef.current.selection = true;
-      fabricCanvasRef.current.forEachObject((obj) => {
-        if (obj.id !== "canvas-border" && obj.type !== "border") {
-          obj.selectable = true;
-          obj.evented = true;
+        // 텍스트 객체 처리
+        if (e.target.type === "textbox" || e.target.type === "i-text") {
+          canvas.bringObjectToFront(e.target);
+          setSelectedElementId(e.target.id);
         }
       });
 
-      // 텍스트 렌더링 품질 개선을 위한 추가 설정
-      fabricCanvasRef.current.enableRetinaScaling = true;
-      fabricCanvasRef.current.imageSmoothingEnabled = true;
+      // 객체 수정 이벤트
+      canvas.on("object:modified", (e) => {
+        if (!e.target || !e.target.id) return;
 
-      fabricCanvasRef.current.renderAll();
-      console.log("드로잉 모드 비활성화 완료");
-    }
-  }, [canvasReady]);
+        // 위치 업데이트
+        updateElementProperty(e.target.id, "x", e.target.left);
+        updateElementProperty(e.target.id, "y", e.target.top);
 
-  // Fabric.js 전역 옵션 설정 - 텍스트 렌더링 품질 향상
+        // 회전 및 크기 업데이트
+        if (e.target.angle !== 0) {
+          updateElementProperty(e.target.id, "rotation", e.target.angle);
+        }
+
+        if (e.target.scaleX !== 1) {
+          updateElementProperty(e.target.id, "scaleX", e.target.scaleX);
+        }
+
+        if (e.target.scaleY !== 1) {
+          updateElementProperty(e.target.id, "scaleY", e.target.scaleY);
+        }
+
+        // 상태 저장
+        saveState();
+      });
+
+      // 더블 클릭으로 텍스트 편집
+      canvas.on("mouse:dblclick", (e) => {
+        if (!e.target) return;
+
+        if (e.target.type === "textbox" || e.target.type === "i-text") {
+          try {
+            canvas.bringObjectToFront(e.target);
+            e.target.enterEditing();
+            canvas.renderAll();
+          } catch (err) {
+            console.error("텍스트 편집 모드 진입 오류:", err);
+          }
+        }
+      });
+
+      // 텍스트 편집 이벤트
+      canvas.on("text:editing:entered", (e) => {
+        if (!e.target) return;
+
+        if (setIsTextEditing) setIsTextEditing(true);
+        if (onTextEdit) onTextEdit(true);
+        if (setShowTextToolbar) setShowTextToolbar(true);
+      });
+
+      canvas.on("text:editing:exited", (e) => {
+        if (!e.target) return;
+
+        if (setIsTextEditing) setIsTextEditing(false);
+        if (onTextEdit) onTextEdit(false);
+        if (setShowTextToolbar) setShowTextToolbar(false);
+
+        if (e.target.id) {
+          updateElementProperty(e.target.id, "text", e.target.text);
+          saveState();
+        }
+      });
+    },
+    [
+      updateElementProperty,
+      saveState,
+      setSelectedElementId,
+      setIsTextEditing,
+      onTextEdit,
+      setShowTextToolbar,
+    ]
+  );
+
+  // 배경 변경 감지
   useEffect(() => {
-    if (typeof fabric !== "undefined") {
-      // 텍스트 렌더링 품질 관련 설정
-      fabric.Object.prototype.objectCaching = false;
-      fabric.Object.prototype.noScaleCache = true;
-      fabric.Object.prototype.statefullCache = true;
-      fabric.Object.prototype.strokeUniform = true;
-      fabric.Text.prototype.textShadow = null;
+    if (!fabricCanvasRef.current || !canvasReady) return;
 
-      // 모든 텍스트 객체의 기본 텍스트 렌더링 설정
-      if (fabric.textRenderingMode) {
-        fabric.textRenderingMode = "optimizeLegibility";
+    console.log("배경 변경 감지:", background?.type);
+
+    // setTimeout으로 다음 렌더링 사이클에서 처리
+    setTimeout(() => {
+      if (fabricCanvasRef.current) {
+        applyBackground(background, fabricCanvasRef.current);
       }
+    }, 100);
+  }, [background, canvasReady, applyBackground]);
 
-      console.log("Fabric.js 전역 텍스트 렌더링 설정 최적화 완료");
-    }
-  }, []);
-
+  // 캔버스 UI 렌더링
   return (
     <div
+      id="canvasContainer"
       ref={canvasContainerRef}
-      className="relative w-full h-full flex items-center justify-center overflow-hidden"
+      className={backgroundColor ? "hasBackgroundColor" : ""}
       style={{
-        zIndex: 20,
-        minHeight: "300px",
-        maxHeight: "90vh", // Increased for more vertical space
-        height: "80%",
-        maxWidth: "800px", // Limit width for desktop mode
-        margin: "0 auto", // Center the container
+        width: "100%",
+        height: "100%",
+        position: "relative",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        overflowY: "auto", // Allow vertical scrolling
+        zIndex: "1",
+        overflow: "hidden",
+        pointerEvents: "auto",
+        padding: "20px",
+        boxSizing: "border-box",
       }}
     >
+      {/* 캔버스 컨테이너 */}
       <div
-        className="relative w-full h-full flex items-center justify-center overflow-hidden"
         style={{
-          zIndex: 30,
-          pointerEvents: "auto",
-          overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          transform: `scale(${canvasScale})`,
+          transformOrigin: "center center",
+          transition: "transform 0.2s ease-out",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+          borderRadius: "4px",
+          position: "relative",
+          // 명시적 방향 설정 - 가로형 캔버스가 올바르게 표시되도록
+          width: `${width}px`,
+          height: `${height}px`,
+          backgroundColor: "#f5f5f5",
+          border: "1px solid rgba(0, 0, 0, 0.1)",
         }}
       >
+        {/* 실제 캔버스 엘리먼트 */}
         <canvas
+          key={canvasKey}
           ref={canvasRef}
-          className="border border-gray-200 dark:border-gray-700 rounded-md shadow-sm"
+          width={width}
+          height={height}
           style={{
-            pointerEvents: "auto",
+            position: "absolute",
+            top: 0,
+            left: 0,
             width: "100%",
             height: "100%",
-            maxWidth: "100%",
-            maxHeight: "100%",
-            objectFit: "contain", // Maintain aspect ratio
-            borderWidth: "2px",
-            overflow: "hidden",
           }}
         />
       </div>
+
+      {/* 디버그 정보 - 개발 중에만 표시 */}
+      {process.env.NODE_ENV === "development" && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "5px",
+            left: "5px",
+            fontSize: "10px",
+            color: "#888",
+            backgroundColor: "rgba(255, 255, 255, 0.8)",
+            padding: "2px 5px",
+            borderRadius: "2px",
+            pointerEvents: "none",
+          }}
+        >
+          {width}x{height} ({activePlatformId}) - Scale:{" "}
+          {canvasScale.toFixed(2)}
+        </div>
+      )}
     </div>
   );
 }
