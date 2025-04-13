@@ -4,12 +4,14 @@ import { useRef, useState, useEffect } from "react";
 import { useEditorStore } from "@/store/editor";
 import { useToast } from "@/hooks/use-toast";
 import { PlatformPreview } from "./PlatformPreview";
+import { ExportModal } from "./ExportModal";
 
 export function Footer() {
   const { undo, redo, saveTemplate, platforms, seo, setSeo, background } =
     useEditorStore();
   const { toast } = useToast();
   const [showSeoDialog, setShowSeoDialog] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [showPlatformPreview, setShowPlatformPreview] = useState(false);
   const dialogRef = useRef(null);
   const platformPreviewRef = useRef(null);
@@ -44,14 +46,46 @@ export function Footer() {
       }
     };
 
+    useEffect(() => {
+      if (dialogRef.current) {
+        dialogRef.current.showModal();
+      }
+
+      // ESC 키로 모달 닫기 기능 추가
+      const handleKeyDown = (e) => {
+        if (e.key === "Escape") {
+          onClose();
+        }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.removeEventListener("keydown", handleKeyDown);
+      };
+    }, [onClose]);
+
     return (
       <dialog
         ref={dialogRef}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        className="fixed inset-0 z-50 m-auto p-0 border-none outline-none bg-black/50 max-w-md w-full max-h-[90vh] overflow-visible"
+        style={{
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          margin: "auto",
+          height: "fit-content",
+          width: "100vw",
+          maxWidth: "100vw",
+        }}
         onClick={(e) => e.target === dialogRef.current && onClose()}
       >
         <div
-          className="bg-background p-6 rounded-lg shadow-lg w-[400px]"
+          className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-full mx-auto overflow-auto"
+          style={{
+            maxWidth: "420px",
+            maxHeight: "calc(90vh - 2rem)",
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <h2 className="text-lg font-semibold mb-4">이미지 SEO 설정</h2>
@@ -129,23 +163,6 @@ export function Footer() {
     );
   };
 
-  // 컴포넌트가 마운트될 때 기본적으로 미리보기 표시
-  useEffect(() => {
-    // 기본적으로 미리보기 표시
-    setShowPlatformPreview(true);
-
-    // 로컬 스토리지에서 미리보기 표시 설정을 불러옴
-    const savedPreviewState = localStorage.getItem("showPlatformPreview");
-    if (savedPreviewState !== null) {
-      setShowPlatformPreview(savedPreviewState === "true");
-    }
-  }, []);
-
-  // 미리보기 상태가 변경될 때 로컬 스토리지에 저장
-  useEffect(() => {
-    localStorage.setItem("showPlatformPreview", showPlatformPreview.toString());
-  }, [showPlatformPreview]);
-
   // 템플릿 저장 처리 함수
   const handleSaveTemplate = () => {
     const templateName = prompt("템플릿 이름을 입력하세요:");
@@ -158,29 +175,29 @@ export function Footer() {
     }
   };
 
-  // 미리보기 토글 함수
-  const togglePlatformPreview = () => {
-    setShowPlatformPreview(!showPlatformPreview);
-  };
-
   // SEO 설정 다이얼로그 표시
   const handleShowSeoDialog = () => {
     setShowSeoDialog(true);
   };
 
+  // 파일 내보내기 모달 표시
+  const handleShowExportModal = () => {
+    setShowExportModal(true);
+  };
+
   return (
     <div className="border-t border-border bg-muted/10">
-      <div className="container mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
           <button
-            className="p-1 rounded-md text-xs hover:bg-muted flex items-center gap-1"
+            className="p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
             onClick={undo}
             title="실행 취소"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -194,14 +211,14 @@ export function Footer() {
             <span className="hidden sm:inline">실행 취소</span>
           </button>
           <button
-            className="p-1 rounded-md text-xs hover:bg-muted flex items-center gap-1"
+            className="p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
             onClick={redo}
             title="다시 실행"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -214,41 +231,19 @@ export function Footer() {
             </svg>
             <span className="hidden sm:inline">다시 실행</span>
           </button>
-          <div className="h-4 border-r border-border mx-1 hidden sm:block"></div>
-          <button
-            className="p-1 rounded-md text-xs hover:bg-muted flex items-center gap-1"
-            onClick={handleSaveTemplate}
-            title="템플릿 저장"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-            <span className="hidden sm:inline">템플릿 저장</span>
-          </button>
+          <div className="h-6 border-r border-border mx-2 hidden sm:block"></div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-grow justify-end items-center gap-4">
           <button
-            className="p-1 rounded-md text-xs hover:bg-muted flex items-center gap-1"
-            onClick={handleShowSeoDialog}
-            title="SEO 설정"
+            className="p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
+            onClick={handleShowExportModal}
+            title="파일 내보내기"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -256,40 +251,11 @@ export function Footer() {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="M4 17V5h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
-              <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2"></path>
-              <line x1="8" y1="9" x2="16" y2="9"></line>
-              <line x1="8" y1="13" x2="12" y2="13"></line>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            <span className="hidden sm:inline">SEO 설정</span>
-          </button>
-          <button
-            className={`p-1 rounded-md text-xs flex items-center gap-1 ${
-              showPlatformPreview
-                ? "bg-primary text-primary-foreground"
-                : "hover:bg-muted"
-            }`}
-            onClick={togglePlatformPreview}
-            title={showPlatformPreview ? "미리보기 숨기기" : "미리보기 표시"}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="17" x2="12" y2="21"></line>
-            </svg>
-            <span className="hidden sm:inline">
-              {showPlatformPreview ? "미리보기 접기" : "플랫폼별 미리보기"}
-            </span>
+            <span className="hidden sm:inline">내보내기</span>
           </button>
         </div>
       </div>
@@ -300,6 +266,13 @@ export function Footer() {
         <SeoDialog
           onClose={() => setShowSeoDialog(false)}
           onConfirm={() => setShowSeoDialog(false)}
+        />
+      )}
+
+      {showExportModal && (
+        <ExportModal
+          onClose={() => setShowExportModal(false)}
+          onExport={() => setShowExportModal(false)}
         />
       )}
     </div>

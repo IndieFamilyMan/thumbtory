@@ -6,6 +6,7 @@ import { ToolbarLeft } from "@/components/editor/ToolbarLeft";
 import Canvas from "@/components/editor/Canvas";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
 import { PlatformPreview } from "@/components/editor/PlatformPreview";
+import { Footer } from "@/components/editor/Footer";
 import TextEditor from "@/components/editor/TextEditor";
 import { useEditorStore } from "@/store/editor";
 import { useToast } from "@/hooks/use-toast";
@@ -329,6 +330,7 @@ export default function EditorPage() {
                 setShowTextToolbar={() => {}}
                 onTextEdit={() => {}}
                 setIsTextEditing={() => {}}
+                isMobile={isMobile}
                 onCanvasReady={(canvasInstance) => {
                   setFabricCanvas(canvasInstance);
                   console.log("캔버스가 준비되었습니다.");
@@ -336,20 +338,10 @@ export default function EditorPage() {
               />
             </div>
           </div>
-          <div className="mt-3 flex items-center justify-between">
-            <div className="text-xs text-muted-foreground">
-              현재 플랫폼:{" "}
-              {Object.entries(SocialMediaLayouts).find(
-                ([id]) => id === activePlatformId
-              )?.[1]?.description || "선택된 플랫폼 없음"}
-            </div>
-            <div className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
-              {SocialMediaLayouts[activePlatformId]?.width || 0} ×{" "}
-              {SocialMediaLayouts[activePlatformId]?.height || 0}
-            </div>
-          </div>
         </div>
 
+        {/* Footer 컴포넌트 추가 */}
+        <Footer />
         {/* 텍스트 에디터 영역 */}
         <div className="p-6 border-b">
           <h2 className="font-medium text-lg mb-4">텍스트 에디터</h2>

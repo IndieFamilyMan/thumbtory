@@ -47,6 +47,7 @@ export default function Canvas({
   setCanvasRef,
   setCanvasImage,
   removeElement,
+  isMobile,
 }) {
   const canvasRef = useRef(null);
   const fabricCanvasRef = useRef(null);
@@ -63,6 +64,7 @@ export default function Canvas({
   const [isMounted, setIsMounted] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isOnMobile, setIsOnMobile] = useState(false);
   const imageCache = useRef({});
   const [canvas, setCanvas] = useState(null);
   const isDrawingRef = useRef(false);
@@ -1200,6 +1202,28 @@ export default function Canvas({
     }
   }, [elements, canvasReady, isDrawMode]);
 
+  // 화면 크기에 따라 모바일 여부 감지
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsOnMobile(window.innerWidth < 768);
+    };
+
+    // 초기 체크
+    checkMobile();
+
+    // isMobile prop이 명시적으로 전달된 경우 그 값을 사용
+    if (isMobile !== undefined) {
+      setIsOnMobile(isMobile);
+    }
+
+    // 창 크기 변경 이벤트에 대응
+    window.addEventListener("resize", checkMobile);
+
+    return () => {
+      window.removeEventListener("resize", checkMobile);
+    };
+  }, [isMobile]);
+
   // 캔버스 UI 렌더링
   return (
     <div
@@ -1216,24 +1240,34 @@ export default function Canvas({
         zIndex: "1",
         overflow: "hidden",
         pointerEvents: "auto",
-        padding: "20px",
+        padding: isOnMobile ? "5px" : "20px",
         boxSizing: "border-box",
       }}
     >
+      <style jsx>{`
+        @media (max-width: 768px) {
+          #canvasContainer {
+            padding: 5px !important;
+          }
+        }
+      `}</style>
       {/* 캔버스 컨테이너 */}
       <div
         style={{
           transform: `scale(${canvasScale})`,
           transformOrigin: "center center",
           transition: "transform 0.2s ease-out",
-          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
-          borderRadius: "4px",
+          boxShadow: isOnMobile
+            ? "0 1px 3px rgba(0, 0, 0, 0.08)"
+            : "0 2px 8px rgba(0, 0, 0, 0.1)",
+          borderRadius: isOnMobile ? "2px" : "4px",
           position: "relative",
-          // 명시적 방향 설정 - 가로형 캔버스가 올바르게 표시되도록
           width: `${width}px`,
           height: `${height}px`,
           backgroundColor: "#f5f5f5",
-          border: "1px solid rgba(0, 0, 0, 0.1)",
+          border: isOnMobile
+            ? "0.5px solid rgba(0, 0, 0, 0.08)"
+            : "1px solid rgba(0, 0, 0, 0.1)",
         }}
       >
         {/* 실제 캔버스 엘리먼트 */}

@@ -59,7 +59,15 @@ const initialState = {
   activePlatformId: "naver",
   elements: [],
   background: { type: "color", value: "#ffffff" },
-  seo: { filename: "", keywords: [], altText: "" },
+  seo: {
+    filename: "",
+    keywords: [],
+    altText: "",
+    description: "",
+    title: "",
+    author: "",
+    copyright: "",
+  },
   templates: [],
   history: {
     past: [],
