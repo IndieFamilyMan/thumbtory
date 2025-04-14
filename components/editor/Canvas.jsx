@@ -99,21 +99,21 @@ export default function Canvas({
     SocialMediaLayouts[activePlatformId] || SocialMediaLayouts.instagram;
   const { toast } = useToast();
 
-  // 텍스트 편집 상태 확인 유틸리티 함수 - 컴포넌트 상단으로 이동
-  const isEditingText = () => {
-    // 전역 변수 확인
-    if (window.__EDITOR_TEXT_EDITING__ === true) {
-      return true;
+  // 텍스트 편집 중인지 확인하는 함수
+  const isEditingText = useCallback(() => {
+    if (!fabricCanvasRef.current) return false;
+
+    // 활성 객체가 텍스트이고 편집 모드인지 확인
+    const activeObject = fabricCanvasRef.current.getActiveObject();
+    if (
+      activeObject &&
+      (activeObject.type === "textbox" || activeObject.type === "i-text")
+    ) {
+      return activeObject.isEditing;
     }
 
-    // 캔버스 객체 확인
-    if (fabricCanvasRef.current) {
-      const activeObject = fabricCanvasRef.current.getActiveObject();
-      return activeObject?.type === "textbox" && activeObject?.isEditing;
-    }
-
-    return isTextEditing;
-  };
+    return false;
+  }, []);
 
   // 안전하게 브러시 속성에 접근하는 헬퍼 함수
   const safeSetBrushProperty = (canvas, property, value) => {
@@ -1005,10 +1005,53 @@ export default function Canvas({
     }
   };
 
-  // 캔버스 이벤트 리스너 설정 - 순서 변경: 위로 이동
+  // 캔버스 이벤트 리스너 설정
   const setupCanvasEventListeners = useCallback(
     (canvas) => {
       if (!canvas) return;
+
+      // 텍스트 편집 관련 이벤트 핸들러
+      // 텍스트 편집 시작
+      canvas.on("text:editing:entered", (e) => {
+        if (!e.target) return;
+
+        console.log("Canvas: 텍스트 편집 시작", e.target.id);
+
+        if (setIsTextEditing) setIsTextEditing(true);
+        if (onTextEdit) onTextEdit(true);
+        if (setShowTextToolbar) setShowTextToolbar(true);
+      });
+
+      // 텍스트 편집 종료
+      canvas.on("text:editing:exited", (e) => {
+        if (!e.target) return;
+
+        console.log("Canvas: 텍스트 편집 종료", e.target.id);
+
+        if (setIsTextEditing) setIsTextEditing(false);
+        if (onTextEdit) onTextEdit(false);
+        if (setShowTextToolbar) setShowTextToolbar(false);
+
+        // 스토어 상태 업데이트 및 저장
+        if (e.target.id) {
+          updateElementProperty(e.target.id, "text", e.target.text);
+          saveState();
+        }
+      });
+
+      // 더블 클릭으로 텍스트 편집
+      canvas.on("mouse:dblclick", (e) => {
+        if (!e.target) return;
+
+        if (e.target.type === "textbox" || e.target.type === "i-text") {
+          try {
+            e.target.enterEditing();
+            canvas.renderAll();
+          } catch (err) {
+            console.error("텍스트 편집 모드 진입 오류:", err);
+          }
+        }
+      });
 
       // 명시적으로 selection과 selectable 설정
       canvas.selection = true;
@@ -1028,7 +1071,44 @@ export default function Canvas({
           e.target.evented = true;
           canvas.renderAll();
         }
+
+        // 그리드나 가이드 요소가 아닌 경우에만 상태 저장
+        if (e.target.id && !e.target.id.startsWith("grid-")) {
+          console.log("객체 추가 후 상태 저장:", e.target.type);
+          saveState();
+        }
       });
+
+      // 키보드 단축키 처리를 위한 전역 이벤트 리스너
+      const handleKeyDown = (e) => {
+        // 텍스트 편집 중이면 키보드 단축키 처리하지 않음
+        if (isEditingText()) return;
+
+        // Ctrl+Z: Undo
+        if (e.ctrlKey && !e.shiftKey && e.key === "z") {
+          e.preventDefault();
+          console.log("Undo 실행");
+          undo();
+        }
+
+        // Ctrl+Y 또는 Ctrl+Shift+Z: Redo
+        if (
+          (e.ctrlKey && e.key === "y") ||
+          (e.ctrlKey && e.shiftKey && e.key === "z")
+        ) {
+          e.preventDefault();
+          console.log("Redo 실행");
+          redo();
+        }
+      };
+
+      // 전역 이벤트 리스너 등록
+      document.addEventListener("keydown", handleKeyDown);
+
+      // 전역 이벤트 핸들러를 window 객체에 저장 (언마운트 시 정리용)
+      window.__EDITOR_EVENT_HANDLERS__ = {
+        handleKeyDown,
+      };
 
       // 마우스 이벤트
       canvas.on("mouse:down", (e) => {
@@ -1042,9 +1122,8 @@ export default function Canvas({
 
         console.log("Canvas: 객체 선택", e.target.type);
 
-        // 텍스트 객체 처리
+        // 텍스트 객체 처리 - bringObjectToFront 제거
         if (e.target.type === "textbox" || e.target.type === "i-text") {
-          canvas.bringObjectToFront(e.target);
           setSelectedElementId(e.target.id);
         }
       });
@@ -1070,6 +1149,8 @@ export default function Canvas({
       canvas.on("object:modified", (e) => {
         if (!e.target || !e.target.id) return;
 
+        console.log("객체 수정됨:", e.target.type);
+
         // 위치 업데이트
         updateElementProperty(e.target.id, "x", e.target.left);
         updateElementProperty(e.target.id, "y", e.target.top);
@@ -1091,47 +1172,13 @@ export default function Canvas({
         saveState();
       });
 
-      // 더블 클릭으로 텍스트 편집
-      canvas.on("mouse:dblclick", (e) => {
-        if (!e.target) return;
+      // 객체 제거 이벤트 추가
+      canvas.on("object:removed", (e) => {
+        if (!e.target || !e.target.id || e.target.id.startsWith("grid-"))
+          return;
 
-        if (e.target.type === "textbox" || e.target.type === "i-text") {
-          try {
-            canvas.bringObjectToFront(e.target);
-            e.target.enterEditing();
-            canvas.renderAll();
-          } catch (err) {
-            console.error("텍스트 편집 모드 진입 오류:", err);
-          }
-        }
-      });
-
-      // 텍스트 편집 이벤트
-      canvas.on("text:editing:entered", (e) => {
-        if (!e.target) return;
-
-        if (setIsTextEditing) setIsTextEditing(true);
-        if (onTextEdit) onTextEdit(true);
-        if (setShowTextToolbar) setShowTextToolbar(true);
-
-        // 전역 플래그 설정
-        window.__EDITOR_TEXT_EDITING__ = true;
-      });
-
-      canvas.on("text:editing:exited", (e) => {
-        if (!e.target) return;
-
-        if (setIsTextEditing) setIsTextEditing(false);
-        if (onTextEdit) onTextEdit(false);
-        if (setShowTextToolbar) setShowTextToolbar(false);
-
-        // 전역 플래그 해제
-        window.__EDITOR_TEXT_EDITING__ = false;
-
-        if (e.target.id) {
-          updateElementProperty(e.target.id, "text", e.target.text);
-          saveState();
-        }
+        console.log("객체 삭제됨:", e.target.type);
+        saveState();
       });
 
       // 마우스 아웃 시 isDrawingMode 체크 및 수정
@@ -1151,6 +1198,9 @@ export default function Canvas({
       onTextEdit,
       setShowTextToolbar,
       isDrawMode,
+      undo,
+      redo,
+      isEditingText,
     ]
   );
 

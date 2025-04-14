@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRef, useState, useEffect } from "react";
 import { useEditorStore } from "@/store/editor";
 import { Button } from "@/components/ui/button";
-import { Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { Trash2, ChevronUp, ChevronDown, Undo2, Redo2 } from "lucide-react";
 import { TextOptions } from "./TextOptions";
 
 export function ToolbarLeft({ isMobileView = false }) {
@@ -20,6 +20,12 @@ export function ToolbarLeft({ isMobileView = false }) {
     setSelectedElementId,
     updateElementProperty,
     addTextElement,
+    addImageElement,
+    undo,
+    redo,
+    undoStack = [],
+    redoStack = [],
+    saveState,
   } = useEditorStore();
   const imageInputRef = useRef(null);
   const backgroundImageInputRef = useRef(null);
@@ -30,8 +36,12 @@ export function ToolbarLeft({ isMobileView = false }) {
   // 텍스트 요소 추가 핸들러
   const handleAddText = () => {
     // 텍스트 추가 및 옵션 패널 열기
+    const id = `text_${Date.now()}`; // 명시적인 ID 생성
+
+    // 텍스트 요소 추가
     const newTextElement = addTextElement({
-      text: "텍스트를 입력하세요",
+      id,
+      text: "", // 공백으로 시작하여 중복 텍스트 방지
       x: 100,
       y: 100,
       width: 300, // 텍스트 너비를 더 넓게 설정
@@ -70,22 +80,30 @@ export function ToolbarLeft({ isMobileView = false }) {
       textRendering: "optimizeLegibility", // 텍스트 렌더링 최적화
     });
 
+    // 상태 저장 (실행 취소/다시 실행용)
+    saveState();
+
+    // 바로 선택 상태로 설정
+    setSelectedElementId(id);
+
     console.log("텍스트 요소 생성 완료", {
-      id: newTextElement.id,
-      text: newTextElement.text,
-      properties: newTextElement,
+      id,
     });
 
-    // New text was added via store, now select it on canvas
+    // 텍스트 객체는 생성 직후에 편집 모드로 진입해야 함
     setTimeout(() => {
       if (window.fabricCanvasInstance) {
         const fabricCanvas = window.fabricCanvasInstance;
         const objects = fabricCanvas.getObjects();
-        const textObject = objects.find((obj) => obj.id === newTextElement.id);
+        const textObject = objects.find((obj) => obj.id === id);
 
         if (textObject) {
-          // 현재 스타일 설정 적용
+          // 기존 선택 해제
+          fabricCanvas.discardActiveObject();
+
+          // 명시적으로 텍스트 업데이트 - "텍스트를 입력하세요"를 기본으로 표시
           textObject.set({
+            text: "텍스트를 입력하세요", // 여기서 기본 텍스트 설정
             fontFamily: "Arial",
             fontSize: 30,
             fill: "#000000",
@@ -93,7 +111,6 @@ export function ToolbarLeft({ isMobileView = false }) {
             fontStyle: "normal",
             underline: false,
             textAlign: "left",
-            // 상호작용 속성 명시적 설정
             selectable: true,
             evented: true,
             hasControls: true,
@@ -103,19 +120,42 @@ export function ToolbarLeft({ isMobileView = false }) {
             lockMovementY: false,
           });
 
-          fabricCanvas.setActiveObject(textObject);
-          fabricCanvas.renderAll();
+          // 스토어에 텍스트 내용도 업데이트
+          updateElementProperty(id, "text", "텍스트를 입력하세요");
 
-          // Enter edit mode
+          // 텍스트 객체 선택 및 렌더링
+          fabricCanvas.setActiveObject(textObject);
+          fabricCanvas.requestRenderAll();
+
+          // 편집 모드 진입 (타이밍 문제 방지를 위해 충분한 지연 설정)
           setTimeout(() => {
-            textObject.enterEditing();
-            fabricCanvas.renderAll();
-          }, 200);
+            try {
+              // 텍스트 객체를 다시 한 번 최신 상태로 참조
+              const updatedObjects = fabricCanvas.getObjects();
+              const updatedTextObject = updatedObjects.find(
+                (obj) => obj.id === id
+              );
+
+              if (updatedTextObject) {
+                // 편집 모드 진입
+                updatedTextObject.enterEditing();
+
+                // 전체 텍스트 선택 - 바로 입력 가능하도록
+                if (updatedTextObject.selectAll) {
+                  updatedTextObject.selectAll();
+                }
+
+                fabricCanvas.requestRenderAll();
+              }
+            } catch (err) {
+              console.error("텍스트 편집 모드 진입 오류:", err);
+            }
+          }, 300);
         } else {
-          console.log("텍스트 객체를 찾을 수 없음:", newTextElement.id);
+          console.log("텍스트 객체를 찾을 수 없음:", id);
         }
       }
-    }, 500);
+    }, 100); // 지연 시간을 줄여 더 빠르게 반응하도록 함
   };
 
   // 텍스트 옵션 변경 핸들러
@@ -204,93 +244,60 @@ export function ToolbarLeft({ isMobileView = false }) {
     imageInputRef.current.click();
   };
 
-  // 이미지 파일 선택 핸들러
+  // 이미지 업로드 핸들러
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      console.log("이미지 파일 선택됨:", file.name, file.type);
+    if (!file) return;
 
-      // 이미지 파일 형식 확인
-      if (!file.type.startsWith("image/")) {
-        alert("이미지 파일만 선택할 수 있습니다.");
-        return;
-      }
-
-      // 파일 크기 제한 (20MB)
-      const maxSize = 20 * 1024 * 1024; // 20MB
-      if (file.size > maxSize) {
-        alert(
-          "이미지 파일 크기가 너무 큽니다. 20MB 이하의 파일을 선택해주세요."
-        );
-        return;
-      }
-
-      const reader = new FileReader();
-
-      reader.onload = (event) => {
-        const imageDataUrl = event.target.result;
-        console.log("이미지 로드 완료, 데이터 길이:", imageDataUrl.length);
-
-        // 이미지 미리 로드하여 크기 확인
-        const img = new Image();
-        img.onload = () => {
-          console.log("이미지 크기 확인:", img.width, "x", img.height);
-
-          // 최적의 크기 계산 (너무 크지 않게)
-          let width = img.width;
-          let height = img.height;
-
-          const maxDimension = 800;
-
-          if (width > maxDimension || height > maxDimension) {
-            if (width > height) {
-              const ratio = height / width;
-              width = maxDimension;
-              height = Math.round(maxDimension * ratio);
-            } else {
-              const ratio = width / height;
-              height = maxDimension;
-              width = Math.round(maxDimension * ratio);
-            }
-            console.log("이미지 크기 조정:", width, "x", height);
-          }
-
-          // 이미지 요소 추가
-          addElement({
-            type: "image",
-            x: 100,
-            y: 100,
-            width: width,
-            height: height,
-            rotation: 0,
-            opacity: 1,
-            src: imageDataUrl,
-            alt: file.name || "업로드된 이미지",
-            objectFit: "cover",
-            scaleX: 1,
-            scaleY: 1,
-          });
-
-          console.log("이미지 요소 추가 완료");
-        };
-
-        img.onerror = (error) => {
-          console.error("이미지 크기 확인 중 오류:", error);
-          alert("이미지 로드 중 오류가 발생했습니다.");
-        };
-
-        img.src = imageDataUrl;
-      };
-
-      reader.onerror = (error) => {
-        console.error("이미지 파일 읽기 오류:", error);
-        alert("이미지 파일을 읽는 중 오류가 발생했습니다.");
-      };
-
-      reader.readAsDataURL(file);
-      // 선택 상태 초기화 (동일한 파일을 다시 선택할 수 있도록)
-      e.target.value = null;
+    // 파일 타입 검증
+    if (!file.type.includes("image/")) {
+      alert("이미지 파일만 업로드할 수 있습니다.");
+      return;
     }
+
+    // 파일 크기 검증 (10MB 이하)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      alert("이미지 크기는 10MB 이하여야 합니다.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const src = event.target.result;
+
+      // 에디터 스토어에 이미지 추가
+      const newImage = addImageElement({
+        src,
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 200,
+      });
+
+      // 상태 저장 (실행 취소/다시 실행용)
+      saveState();
+
+      // 새로 추가된 이미지를 선택
+      setTimeout(() => {
+        if (window.fabricCanvasInstance) {
+          const canvas = window.fabricCanvasInstance;
+          const objects = canvas.getObjects();
+          const imgObj = objects.find((obj) => obj.id === newImage.id);
+          if (imgObj) {
+            // 기존 선택 해제
+            canvas.discardActiveObject();
+
+            // 선택만 하고 맨 위로 가져오지 않음
+            canvas.setActiveObject(imgObj);
+            canvas.renderAll();
+            setSelectedElementId(newImage.id);
+          }
+        }
+      }, 500);
+    };
+
+    reader.readAsDataURL(file);
   };
 
   // 배경 이미지 설정 함수
@@ -364,86 +371,43 @@ export function ToolbarLeft({ isMobileView = false }) {
     setBackground({ type: "color", value: color });
   };
 
-  // 도형 요소 추가 핸들러
-  const handleAddShape = () => {
-    // 도형 정보 객체 생성
-    const shapeElement = {
-      type: "shape",
-      shape: "rectangle", // 기본 도형 유형
-      x: 100,
-      y: 100,
-      width: 100,
-      height: 100,
-      rotation: 0,
-      opacity: 1,
-      fill: "#3b82f6",
-      stroke: "#1d4ed8",
-      strokeWidth: 0,
-    };
-
-    // 에디터 스토어에 도형 요소 추가
-    addElement(shapeElement);
-
-    // 추가된 도형을 캔버스에 직접 그리기 시도
-    setTimeout(() => {
-      const canvas = window.fabricCanvasInstance;
-      if (canvas) {
-        try {
-          // 마지막에 추가된 요소 ID 가져오기
-          const addedElement = useEditorStore.getState().elements.slice(-1)[0];
-          if (addedElement && addedElement.type === "shape") {
-            console.log("도형 요소 추가 완료:", addedElement.id);
-
-            // 캔버스에서 해당 요소 찾기
-            const objects = canvas.getObjects();
-            const shapeObject = objects.find(
-              (obj) => obj.id === addedElement.id
-            );
-
-            if (shapeObject) {
-              // 도형 요소 선택
-              canvas.setActiveObject(shapeObject);
-              canvas.renderAll();
-            } else {
-              console.error(
-                "추가된 도형 요소를 찾을 수 없음:",
-                addedElement.id
-              );
-            }
-          }
-        } catch (error) {
-          console.error("도형 요소 선택 중 오류:", error);
-        }
-      }
-    }, 500);
-  };
-
-  // 아이콘 요소 추가 핸들러
-  const handleAddIcon = () => {
-    addElement({
-      type: "icon",
-      x: 100,
-      y: 100,
-      width: 50,
-      height: 50,
-      rotation: 0,
-      opacity: 1,
-      iconName: "star",
-      color: "#f59e0b",
-    });
-  };
-
   // 요소를 위로 이동 핸들러 (시각적으로 위로 = z-index 증가 = 배열에서는 앞으로)
   const handleMoveElementUp = () => {
     if (selectedElementId) {
-      useEditorStore.getState().moveElementDown(selectedElementId);
+      // 실제 객체 순서를 변경 (하단으로 옮기면 위로 올라가는 효과)
+      if (window.fabricCanvasInstance) {
+        const canvas = window.fabricCanvasInstance;
+        const activeObject = canvas.getActiveObject();
+        if (activeObject) {
+          // Fabric 캔버스에서의 객체 순서 변경
+          canvas.bringObjectForward(activeObject);
+          canvas.renderAll();
+
+          // 스토어에서 직접 undo/saveState 함수만 호출
+          // 요소 순서는 Canvas에서 관리하고, 스토어에는 저장만 함
+          saveState();
+        }
+      }
     }
   };
 
   // 요소를 아래로 이동 핸들러 (시각적으로 아래로 = z-index 감소 = 배열에서는 뒤로)
   const handleMoveElementDown = () => {
     if (selectedElementId) {
-      useEditorStore.getState().moveElementUp(selectedElementId);
+      // 실제 객체 순서를 변경 (위로 옮기면 아래로 내려가는 효과)
+      if (window.fabricCanvasInstance) {
+        const canvas = window.fabricCanvasInstance;
+        const activeObject = canvas.getActiveObject();
+        if (activeObject) {
+          // Fabric 캔버스에서의 객체 순서 변경
+          canvas.sendObjectBackwards(activeObject);
+          canvas.renderAll();
+
+          // 스토어에서 직접 undo/saveState 함수만 호출
+          // 요소 순서는 Canvas에서 관리하고, 스토어에는 저장만 함
+          saveState();
+        }
+      }
     }
   };
 
@@ -459,6 +423,107 @@ export function ToolbarLeft({ isMobileView = false }) {
     if (!selectedElementId) return false;
     const index = elements.findIndex((e) => e.id === selectedElementId);
     return index === 0;
+  };
+
+  // 히스토리 기능 - Undo/Redo
+  const handleUndo = () => {
+    console.log("실행 취소");
+    undo();
+  };
+
+  const handleRedo = () => {
+    console.log("다시 실행");
+    redo();
+  };
+
+  // 선택된 요소 삭제 핸들러
+  const handleDelete = () => {
+    if (!selectedElementId) return;
+
+    console.log("요소 삭제:", selectedElementId);
+
+    // 캔버스에서 객체 삭제
+    if (window.fabricCanvasInstance) {
+      const canvas = window.fabricCanvasInstance;
+      const objects = canvas.getObjects();
+      const obj = objects.find((o) => o.id === selectedElementId);
+      if (obj) {
+        canvas.remove(obj);
+        canvas.renderAll();
+      }
+    }
+
+    // 스토어에서 요소 삭제
+    removeElement(selectedElementId);
+
+    // 상태 저장 (실행 취소/다시 실행용)
+    saveState();
+
+    // 선택 해제
+    setSelectedElementId(null);
+  };
+
+  // 도형 요소 추가 핸들러
+  const handleAddShape = () => {
+    console.log("도형 추가");
+    const id = `shape_${Date.now()}`;
+
+    // addElement 사용하여 도형 추가
+    addElement({
+      id,
+      type: "shape",
+      shape: "rectangle", // 현재는 사각형만 지원
+      x: 100,
+      y: 100,
+      width: 150,
+      height: 100,
+      fill: "#3b82f6", // 파란색
+      stroke: "#1d4ed8", // 테두리 색상
+      strokeWidth: 0, // 테두리 두께
+    });
+
+    // 상태 저장 (실행 취소/다시 실행용)
+    saveState();
+
+    // 자동으로 새 요소 선택
+    setTimeout(() => {
+      if (window.fabricCanvasInstance) {
+        const canvas = window.fabricCanvasInstance;
+        const objects = canvas.getObjects();
+        const shapeObject = objects.find((obj) => obj.id === id);
+        if (shapeObject) {
+          // 기존 선택 해제
+          canvas.discardActiveObject();
+
+          // 선택만 하고 맨 위로 가져오지 않음
+          canvas.setActiveObject(shapeObject);
+          canvas.renderAll();
+          setSelectedElementId(id);
+        }
+      }
+    }, 100);
+  };
+
+  // 아이콘 요소 추가 핸들러
+  const handleAddIcon = () => {
+    const id = `icon_${Date.now()}`;
+
+    // addElement 사용하여 아이콘 추가
+    addElement({
+      id,
+      type: "icon",
+      x: 100,
+      y: 100,
+      width: 50,
+      height: 50,
+      rotation: 0,
+      opacity: 1,
+      iconName: "star",
+      color: "#f59e0b",
+    });
+
+    // 상태 저장 (실행 취소/다시 실행용)
+    saveState();
   };
 
   return (
@@ -558,10 +623,7 @@ export function ToolbarLeft({ isMobileView = false }) {
               <Button
                 variant="destructive"
                 className="flex-1 flex items-center justify-center gap-1 py-2"
-                onClick={() => {
-                  removeElement(selectedElementId);
-                  setSelectedElementId(null);
-                }}
+                onClick={handleDelete}
                 title="선택된 요소 삭제"
               >
                 <Trash2 className="h-4 w-4" />
@@ -570,6 +632,28 @@ export function ToolbarLeft({ isMobileView = false }) {
             </div>
           </div>
         )}
+
+        {/* 히스토리 버튼 추가 */}
+        <div className="flex flex-nowrap w-full px-1 py-3 gap-3">
+          <button
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            onClick={handleUndo}
+            disabled={!undoStack || undoStack.length === 0}
+            title="실행 취소 (Ctrl+Z)"
+          >
+            <Undo2 className="w-5 h-5 mb-1" />
+            <span className="text-xs">실행취소</span>
+          </button>
+          <button
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            onClick={handleRedo}
+            disabled={!redoStack || redoStack.length === 0}
+            title="다시 실행 (Ctrl+Y)"
+          >
+            <Redo2 className="w-5 h-5 mb-1" />
+            <span className="text-xs">다시실행</span>
+          </button>
+        </div>
       </div>
     </aside>
   );

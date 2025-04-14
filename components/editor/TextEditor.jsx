@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const PREVENT_DUPLICATE_TEXT = {
+  lastEdited: null,
+  lastText: "",
+  isProcessing: false,
+};
+
 export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
   const {
     selectedElementId,
@@ -608,191 +614,6 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
     }
   };
 
-  // 선택된 객체 변경 시 텍스트 컨트롤 업데이트
-  useEffect(() => {
-    if (!localCanvas) return;
-
-    console.log("TextEditor: 캔버스 이벤트 리스너 설정");
-
-    // 마우스 다운 이벤트에 로그 추가
-    const handleMouseDown = (e) => {
-      console.log("TextEditor: 캔버스 mouse:down 이벤트 발생", {
-        target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
-        pointer: e.pointer,
-        button: e.button,
-      });
-
-      // 텍스트 객체에 대한 상호작용 속성 확인 및 수정
-      if (
-        e.target &&
-        (e.target.type === "i-text" || e.target.type === "textbox")
-      ) {
-        // 선택된 텍스트 객체의 상호작용 속성 확인
-        console.log("TextEditor: 텍스트 객체 상호작용 속성 확인", {
-          id: e.target.id,
-          selectable: e.target.selectable,
-          evented: e.target.evented,
-          hasControls: e.target.hasControls,
-          editable: e.target.editable,
-          lockMovementX: e.target.lockMovementX,
-          lockMovementY: e.target.lockMovementY,
-        });
-
-        // 필요한 경우 상호작용 속성 강제 설정
-        if (!e.target.selectable || !e.target.evented) {
-          console.log("TextEditor: 텍스트 객체 상호작용 속성 강제 수정");
-          e.target.set({
-            selectable: true,
-            evented: true,
-            hasControls: true,
-            hasBorders: true,
-            editable: true,
-            lockMovementX: false,
-            lockMovementY: false,
-          });
-          localCanvas.renderAll();
-        }
-      }
-    };
-
-    // 객체 선택 시도 시 로그 추가
-    const handleBeforeSelection = (e) => {
-      console.log("TextEditor: 객체 선택 시도 (before:selection)", {
-        target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
-      });
-    };
-
-    const handleSelectionCreated = (options) => {
-      console.log("TextEditor: selection:created 이벤트 발생", {
-        selected: options.selected
-          ? options.selected.map((obj) => `${obj.type} (id: ${obj.id})`)
-          : "없음",
-      });
-
-      if (options.selected && options.selected[0]) {
-        const selectedObject = options.selected[0];
-
-        // 텍스트 객체의 상호작용 속성 확인 및 수정
-        if (
-          selectedObject.type === "i-text" ||
-          selectedObject.type === "textbox"
-        ) {
-          // 선택된 텍스트 객체의 상호작용 속성 설정
-          selectedObject.set({
-            selectable: true,
-            evented: true,
-            hasControls: true,
-            hasBorders: true,
-            editable: true,
-            lockMovementX: false,
-            lockMovementY: false,
-          });
-          localCanvas.renderAll();
-        }
-
-        updateTextControls(selectedObject);
-      }
-    };
-
-    const handleSelectionUpdated = (options) => {
-      console.log("TextEditor: selection:updated 이벤트 발생", {
-        selected: options.selected
-          ? options.selected.map((obj) => `${obj.type} (id: ${obj.id})`)
-          : "없음",
-      });
-
-      if (options.selected && options.selected[0]) {
-        updateTextControls(options.selected[0]);
-      }
-    };
-
-    const handleSelectionCleared = (e) => {
-      console.log("TextEditor: selection:cleared 이벤트 발생");
-      // 선택 해제 시 마지막 상태 유지 (새 텍스트 추가 시 이 설정 사용)
-      // 상태는 유지하지만 UI에 활성 상태 표시는 안함
-
-      // 선택 해제 후에도 모든 텍스트 객체가 선택 가능하도록 유지
-      if (localCanvas) {
-        localCanvas.getObjects().forEach((obj) => {
-          if (obj.type === "i-text" || obj.type === "textbox") {
-            obj.set({
-              selectable: true,
-              evented: true,
-            });
-          }
-        });
-        localCanvas.renderAll();
-      }
-    };
-
-    // 객체 수정 시 실시간 업데이트
-    const handleObjectModified = (e) => {
-      console.log("TextEditor: object:modified 이벤트 발생", {
-        target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
-      });
-
-      if (
-        e.target &&
-        (e.target.type === "i-text" || e.target.type === "textbox")
-      ) {
-        updateTextControls(e.target);
-      }
-    };
-
-    // 텍스트 변경 시 실시간 업데이트
-    const handleTextChanged = (e) => {
-      console.log("TextEditor: text:changed 이벤트 발생", {
-        target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
-        text: e.target ? e.target.text : "없음",
-      });
-
-      if (
-        e.target &&
-        (e.target.type === "i-text" || e.target.type === "textbox")
-      ) {
-        // 텍스트 내용만 업데이트 (다른 속성은 유지)
-        setText(e.target.text || "");
-
-        // 스토어 상태 업데이트
-        if (e.target.id) {
-          updateElementProperty(e.target.id, "text", e.target.text);
-        }
-      }
-    };
-
-    // 캔버스 전체 상태 로깅
-    console.log(
-      "TextEditor: 현재 캔버스 객체 목록",
-      localCanvas.getObjects().map((obj) => ({
-        type: obj.type,
-        id: obj.id,
-        selectable: obj.selectable,
-        evented: obj.evented,
-        visible: obj.visible,
-      }))
-    );
-
-    localCanvas.on("mouse:down", handleMouseDown);
-    localCanvas.on("before:selection:cleared", handleBeforeSelection);
-    localCanvas.on("selection:created", handleSelectionCreated);
-    localCanvas.on("selection:updated", handleSelectionUpdated);
-    localCanvas.on("selection:cleared", handleSelectionCleared);
-    localCanvas.on("object:modified", handleObjectModified);
-    localCanvas.on("text:changed", handleTextChanged);
-
-    // Cleanup
-    return () => {
-      console.log("TextEditor: 캔버스 이벤트 리스너 제거");
-      localCanvas.off("mouse:down", handleMouseDown);
-      localCanvas.off("before:selection:cleared", handleBeforeSelection);
-      localCanvas.off("selection:created", handleSelectionCreated);
-      localCanvas.off("selection:updated", handleSelectionUpdated);
-      localCanvas.off("selection:cleared", handleSelectionCleared);
-      localCanvas.off("object:modified", handleObjectModified);
-      localCanvas.off("text:changed", handleTextChanged);
-    };
-  }, [localCanvas, updateElementProperty]);
-
   // 텍스트 편집 시작/종료 처리
   useEffect(() => {
     if (!localCanvas) return;
@@ -806,6 +627,11 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
         e.target &&
         (e.target.type === "i-text" || e.target.type === "textbox")
       ) {
+        // 중복 텍스트 방지를 위한 상태 초기화
+        PREVENT_DUPLICATE_TEXT.lastEdited = e.target.id;
+        PREVENT_DUPLICATE_TEXT.lastText = e.target.text || "";
+        PREVENT_DUPLICATE_TEXT.isProcessing = false;
+
         // 편집 시작 시 텍스트 컨트롤 업데이트
         updateTextControls(e.target);
 
@@ -824,17 +650,68 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
     };
 
     const handleTextEditExited = (e) => {
+      if (!e.target) return;
+
       console.log("TextEditor: 텍스트 편집 종료", {
         target: e.target ? `${e.target.type} (id: ${e.target.id})` : "없음",
         text: e.target ? e.target.text : "없음",
+        lastEdited: PREVENT_DUPLICATE_TEXT.lastEdited,
+        lastText: PREVENT_DUPLICATE_TEXT.lastText,
       });
 
       if (
         e.target &&
         (e.target.type === "i-text" || e.target.type === "textbox")
       ) {
+        // 텍스트 내용 업데이트
+        setText(e.target.text || "");
+
+        // 중복 텍스트 체크
+        if (
+          PREVENT_DUPLICATE_TEXT.lastEdited === e.target.id &&
+          e.target.text.includes(PREVENT_DUPLICATE_TEXT.lastText) &&
+          e.target.text !== PREVENT_DUPLICATE_TEXT.lastText &&
+          !PREVENT_DUPLICATE_TEXT.isProcessing
+        ) {
+          console.log("중복 텍스트 감지 - 복구 시도", {
+            current: e.target.text,
+            last: PREVENT_DUPLICATE_TEXT.lastText,
+          });
+
+          // 중복 텍스트 제거 - 처리 중 플래그
+          PREVENT_DUPLICATE_TEXT.isProcessing = true;
+
+          // 원래 텍스트만 남기고, 중복된 텍스트 제거
+          const originalText = e.target.text.substring(
+            0,
+            e.target.text.indexOf(PREVENT_DUPLICATE_TEXT.lastText) === 0
+              ? PREVENT_DUPLICATE_TEXT.lastText.length
+              : e.target.text.length
+          );
+
+          // 텍스트 설정
+          e.target.set({
+            text: originalText,
+          });
+
+          setText(originalText);
+
+          // 스토어에도 업데이트
+          if (e.target.id) {
+            updateElementProperty(e.target.id, "text", originalText);
+          }
+
+          // 중복 방지를 위해 마지막 텍스트 업데이트
+          PREVENT_DUPLICATE_TEXT.lastText = originalText;
+        } else {
+          // 정상적인 텍스트 업데이트인 경우
+          PREVENT_DUPLICATE_TEXT.lastText = e.target.text || "";
+        }
+
+        // 처리 완료
+        PREVENT_DUPLICATE_TEXT.isProcessing = false;
+
         // 편집 종료 시 텍스트 객체의 크기 조정 (텍스트가 짤리지 않도록)
-        const textWidth = e.target.width;
         e.target.set({
           width: Math.max(
             e.target.width,
@@ -863,6 +740,7 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
       }
     };
 
+    // 편집 핸들러 등록
     localCanvas.on("text:editing:entered", handleTextEditStarted);
     localCanvas.on("text:editing:exited", handleTextEditExited);
 
@@ -871,6 +749,43 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
       localCanvas.off("text:editing:exited", handleTextEditExited);
     };
   }, [localCanvas, onTextUpdated, saveState, updateElementProperty]);
+
+  // 객체 선택 변경 시 처리
+  useEffect(() => {
+    if (!localCanvas) return;
+
+    // 객체 선택 이벤트
+    const handleSelectionCreated = (e) => {
+      if (!e.selected || !e.selected.length) return;
+
+      const selectedObj = e.selected[0];
+
+      // 텍스트 객체 선택 시 컨트롤 업데이트
+      if (selectedObj.type === "textbox" || selectedObj.type === "i-text") {
+        updateTextControls(selectedObj);
+      }
+    };
+
+    // 객체 선택 업데이트 이벤트
+    const handleSelectionUpdated = (e) => {
+      if (!e.selected || !e.selected.length) return;
+
+      const selectedObj = e.selected[0];
+
+      // 텍스트 객체 선택 시 컨트롤 업데이트
+      if (selectedObj.type === "textbox" || selectedObj.type === "i-text") {
+        updateTextControls(selectedObj);
+      }
+    };
+
+    localCanvas.on("selection:created", handleSelectionCreated);
+    localCanvas.on("selection:updated", handleSelectionUpdated);
+
+    return () => {
+      localCanvas.off("selection:created", handleSelectionCreated);
+      localCanvas.off("selection:updated", handleSelectionUpdated);
+    };
+  }, [localCanvas]);
 
   return (
     <div className={cn("font-sans", className)}>
