@@ -356,6 +356,30 @@ export function ToolbarLeft({ isMobileView = false }) {
       img.onload = () => {
         console.log("이미지 로드 완료, 크기:", img.width, "x", img.height);
 
+        // 현재 캔버스 크기 가져오기 (없으면 활성 플랫폼 크기 사용)
+        let canvasWidth, canvasHeight;
+
+        if (window.fabricCanvasInstance) {
+          canvasWidth = window.fabricCanvasInstance.getWidth();
+          canvasHeight = window.fabricCanvasInstance.getHeight();
+        } else {
+          // 활성 플랫폼 찾기
+          const platform = platforms.find((p) => p.id === activePlatformId);
+          if (platform) {
+            canvasWidth = platform.width;
+            canvasHeight = platform.height;
+          } else {
+            // 기본값
+            canvasWidth = 600;
+            canvasHeight = 400;
+          }
+        }
+
+        // 이미지 크기 정보를 유지하고 중앙에 배치
+        // 좌표는 캔버스 중앙을 기준으로 설정 (Canvas.jsx에서 originX, originY를 'center'로 설정했기 때문)
+        const x = canvasWidth / 2;
+        const y = canvasHeight / 2;
+
         // 배경 정보 객체 생성
         const backgroundInfo = {
           type: "image",
@@ -364,11 +388,14 @@ export function ToolbarLeft({ isMobileView = false }) {
           width: img.width,
           height: img.height,
           filename: file.name,
+          // 중앙 정렬을 위한 좌표 (캔버스 중앙)
+          x: x,
+          y: y,
         };
 
         // 에디터 스토어에 배경 정보 설정
         setBackground(backgroundInfo);
-        console.log("배경 이미지 설정 완료:", file.name);
+        console.log("배경 이미지 설정 완료:", file.name, "위치:", x, y);
 
         // 파일 선택 필드 초기화
         e.target.value = null;

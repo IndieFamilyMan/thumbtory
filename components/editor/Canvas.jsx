@@ -1026,23 +1026,26 @@ export default function Canvas({
 
               // 이미지 속성 설정
               fabricImg.set({
-                originX: "left",
-                originY: "top",
-                left: canvasWidth / 2,
-                top: canvasHeight / 2,
+                originX: "center", // 중앙 기준점으로 변경
+                originY: "center", // 중앙 기준점으로 변경
+                // 배경 객체에 x, y 좌표가 있으면 해당 좌표 사용, 없으면 중앙 배치
+                left:
+                  background.x !== undefined ? background.x : canvasWidth / 2,
+                top:
+                  background.y !== undefined ? background.y : canvasHeight / 2,
               });
 
-              // 이미지 크기 조정 (캔버스를 채우도록)
+              // 이미지 크기 조정 - 가로는 항상 캔버스에 꽉 차도록 설정
+              // 가로 기준으로 스케일링 (너비에 맞춤)
               const scaleX = canvasWidth / imgElement.width;
-              const scaleY = canvasHeight / imgElement.height;
-              const scale = Math.max(scaleX, scaleY); // 더 큰 스케일 선택하여 캔버스 전체 채우기
 
-              fabricImg.scale(scale);
+              // 세로 비율 유지 (가로 스케일을 세로에도 적용)
+              fabricImg.scale(scaleX);
 
-              console.log("이미지 스케일링:", {
+              console.log("이미지 가로 기준 스케일링:", {
                 canvasSize: `${canvasWidth}x${canvasHeight}`,
                 imageSize: `${imgElement.width}x${imgElement.height}`,
-                scale: scale,
+                scale: scaleX,
               });
 
               // 캔버스에 이미지 설정 (backgroundImage 속성 직접 설정)
