@@ -1260,7 +1260,17 @@ export default function Canvas({
           } else if (element.type === "text") {
             // 텍스트 요소는 기존 로직에서 처리됨
           } else if (element.type === "shape") {
-            // 도형 요소는 기존 로직에서 처리됨
+            const shapeObj = createShapeObject(
+              element,
+              fabricCanvasRef.current
+            );
+            if (shapeObj) {
+              fabricCanvasRef.current.add(shapeObj);
+              // 요소 ID 선택 상태 확인
+              if (element.id === selectedElementId) {
+                fabricCanvasRef.current.setActiveObject(shapeObj);
+              }
+            }
           } else if (element.type === "icon") {
             // 아이콘 요소는 기존 로직에서 처리됨
           }
@@ -1364,6 +1374,86 @@ export default function Canvas({
       window.removeEventListener("resize", checkMobile);
     };
   }, [isMobile]);
+
+  // 도형 객체 생성 함수 - 다른 유틸리티 함수들 바로 아래에 추가
+  const createShapeObject = (elementData, canvas) => {
+    if (!canvas) return null;
+
+    let shapeObj;
+    const {
+      shape,
+      x,
+      y,
+      width,
+      height,
+      fill,
+      stroke,
+      strokeWidth,
+      rotation,
+      opacity,
+    } = elementData;
+
+    // 도형 타입에 따라 적절한 객체 생성
+    switch (shape) {
+      case "circle":
+        shapeObj = new Circle({
+          left: x,
+          top: y,
+          radius: width / 2,
+          fill: fill || "#3b82f6",
+          stroke: stroke || "#1d4ed8",
+          strokeWidth: strokeWidth || 0,
+          angle: rotation || 0,
+          opacity: opacity !== undefined ? opacity : 1,
+        });
+        break;
+      case "triangle":
+        shapeObj = new Triangle({
+          left: x,
+          top: y,
+          width: width,
+          height: height,
+          fill: fill || "#3b82f6",
+          stroke: stroke || "#1d4ed8",
+          strokeWidth: strokeWidth || 0,
+          angle: rotation || 0,
+          opacity: opacity !== undefined ? opacity : 1,
+        });
+        break;
+      case "rectangle":
+      default:
+        shapeObj = new Rect({
+          left: x,
+          top: y,
+          width: width,
+          height: height,
+          fill: fill || "#3b82f6",
+          stroke: stroke || "#1d4ed8",
+          strokeWidth: strokeWidth || 0,
+          angle: rotation || 0,
+          opacity: opacity !== undefined ? opacity : 1,
+        });
+        break;
+    }
+
+    if (shapeObj) {
+      // 공통 속성 설정
+      shapeObj.set({
+        id: elementData.id,
+        customType: "shape", // 도형 객체 식별을 위한 타입
+        shape: shape, // 도형 유형 저장
+        selectable: true,
+        hasControls: true,
+        hasBorders: true,
+        transparentCorners: false,
+        cornerColor: "#000000",
+        cornerSize: 8,
+        strokeUniform: true,
+      });
+    }
+
+    return shapeObj;
+  };
 
   // 캔버스 UI 렌더링
   return (

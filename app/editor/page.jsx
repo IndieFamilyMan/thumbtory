@@ -7,7 +7,7 @@ import Canvas from "@/components/editor/Canvas";
 
 import { PlatformPreview } from "@/components/editor/PlatformPreview";
 import { Footer } from "@/components/editor/Footer";
-import TextEditor from "@/components/editor/TextEditor";
+import EditorPanel from "@/components/editor/EditorPanel";
 import { useEditorStore } from "@/store/editor";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -327,12 +327,13 @@ export default function EditorPage() {
 
         {/* Footer 컴포넌트 추가 */}
         <Footer />
-        {/* 텍스트 에디터 영역 */}
+        {/* 요소 편집기 영역 - 선택된 요소 타입에 따라 적절한 편집기가 표시됨 */}
         <div className="p-6 border-b">
-          <TextEditor
+          <h2 className="font-medium text-lg mb-4">요소 편집</h2>
+          <EditorPanel
             canvas={fabricCanvas}
-            onTextUpdated={(textObject) => {
-              console.log("텍스트 업데이트됨:", textObject?.text);
+            onElementUpdated={(element) => {
+              console.log("요소 업데이트됨:", element);
             }}
           />
         </div>

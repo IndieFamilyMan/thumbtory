@@ -34,69 +34,88 @@ export function ToolbarLeft({ isMobileView = false }) {
       text: "텍스트를 입력하세요",
       x: 100,
       y: 100,
-      width: 200,
-      fontSize: 24,
+      width: 300, // 텍스트 너비를 더 넓게 설정
+      fontSize: 30,
       fontFamily: "Arial",
       fill: "#000000",
       textAlign: "left",
+      fontWeight: "bold",
+      fontStyle: "normal",
+      underline: false,
+      selectable: true,
+      evented: true,
+      hasControls: true,
+      hasBorders: true,
+      editable: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockRotation: false,
+      lockScalingX: false,
+      lockScalingY: false,
+      hasRotatingPoint: true,
+      objectCaching: false, // 이동 시 해상도 유지를 위해 캐싱 비활성화
+      cornerColor: "#0084ff",
+      borderColor: "#0084ff",
+      padding: 10, // 패딩 증가
+      originX: "left",
+      originY: "top",
+      splitByGrapheme: false, // 글자 단위 분할 비활성화
+      // 텍스트 렌더링 품질 개선 설정
+      noScaleCache: true,
+      statefullCache: true,
+      strokeUniform: true,
+      miterLimit: 10,
+      paintFirst: "fill",
+      shadow: null, // 그림자 효과 제거
+      textRendering: "optimizeLegibility", // 텍스트 렌더링 최적화
     });
 
-    setShowTextOptions(true);
+    console.log("텍스트 요소 생성 완료", {
+      id: newTextElement.id,
+      text: newTextElement.text,
+      properties: newTextElement,
+    });
 
-    // 새로 추가된 텍스트 요소를 즉시 선택 및 편집 모드로 전환
+    // New text was added via store, now select it on canvas
     setTimeout(() => {
-      const canvas = window.fabricCanvasInstance;
-      if (canvas) {
-        try {
-          // 생성된 텍스트 요소 찾기
-          const objects = canvas.getObjects();
-          const textObject = objects.find(
-            (obj) => obj.id === newTextElement.id
-          );
+      if (window.fabricCanvasInstance) {
+        const fabricCanvas = window.fabricCanvasInstance;
+        const objects = fabricCanvas.getObjects();
+        const textObject = objects.find((obj) => obj.id === newTextElement.id);
 
-          if (textObject) {
-            console.log("새 텍스트 요소 활성화:", newTextElement.id);
+        if (textObject) {
+          // 현재 스타일 설정 적용
+          textObject.set({
+            fontFamily: "Arial",
+            fontSize: 30,
+            fill: "#000000",
+            fontWeight: "bold",
+            fontStyle: "normal",
+            underline: false,
+            textAlign: "left",
+            // 상호작용 속성 명시적 설정
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+            editable: true,
+            lockMovementX: false,
+            lockMovementY: false,
+          });
 
-            // 기존 선택 객체가 있다면 선택 해제
-            canvas.discardActiveObject();
+          fabricCanvas.setActiveObject(textObject);
+          fabricCanvas.renderAll();
 
-            // 텍스트 요소 맨 앞으로 가져오기
-            canvas.bringObjectToFront(textObject);
-
-            // 텍스트 요소 선택
-            canvas.setActiveObject(textObject);
-            canvas.renderAll();
-
-            // 포커스가 확보된 후 편집 모드 진입 (지연 설정)
-            setTimeout(() => {
-              try {
-                // 텍스트 편집 모드 활성화
-                textObject.enterEditing();
-
-                // 히든 텍스트 영역에 포커스 확보
-                if (textObject.hiddenTextarea) {
-                  textObject.hiddenTextarea.focus();
-                }
-
-                // 텍스트 전체 선택
-                if (typeof textObject.selectAll === "function") {
-                  textObject.selectAll();
-                }
-
-                // 캔버스 다시 렌더링
-                canvas.renderAll();
-              } catch (err) {
-                console.error("텍스트 편집 모드 진입 중 오류:", err);
-              }
-            }, 200); // 시간을 늘려 안정성 확보
-          } else {
-            console.error("텍스트 요소를 찾을 수 없음:", newTextElement.id);
-          }
-        } catch (error) {
-          console.error("텍스트 요소 편집 모드 설정 중 오류:", error);
+          // Enter edit mode
+          setTimeout(() => {
+            textObject.enterEditing();
+            fabricCanvas.renderAll();
+          }, 200);
+        } else {
+          console.log("텍스트 객체를 찾을 수 없음:", newTextElement.id);
         }
       }
-    }, 500); // 텍스트 요소가 캔버스에 추가될 충분한 시간 확보
+    }, 500);
   };
 
   // 텍스트 옵션 변경 핸들러
@@ -347,19 +366,56 @@ export function ToolbarLeft({ isMobileView = false }) {
 
   // 도형 요소 추가 핸들러
   const handleAddShape = () => {
-    addElement({
+    // 도형 정보 객체 생성
+    const shapeElement = {
       type: "shape",
+      shape: "rectangle", // 기본 도형 유형
       x: 100,
       y: 100,
       width: 100,
       height: 100,
       rotation: 0,
       opacity: 1,
-      shape: "rectangle",
       fill: "#3b82f6",
       stroke: "#1d4ed8",
       strokeWidth: 0,
-    });
+    };
+
+    // 에디터 스토어에 도형 요소 추가
+    addElement(shapeElement);
+
+    // 추가된 도형을 캔버스에 직접 그리기 시도
+    setTimeout(() => {
+      const canvas = window.fabricCanvasInstance;
+      if (canvas) {
+        try {
+          // 마지막에 추가된 요소 ID 가져오기
+          const addedElement = useEditorStore.getState().elements.slice(-1)[0];
+          if (addedElement && addedElement.type === "shape") {
+            console.log("도형 요소 추가 완료:", addedElement.id);
+
+            // 캔버스에서 해당 요소 찾기
+            const objects = canvas.getObjects();
+            const shapeObject = objects.find(
+              (obj) => obj.id === addedElement.id
+            );
+
+            if (shapeObject) {
+              // 도형 요소 선택
+              canvas.setActiveObject(shapeObject);
+              canvas.renderAll();
+            } else {
+              console.error(
+                "추가된 도형 요소를 찾을 수 없음:",
+                addedElement.id
+              );
+            }
+          }
+        } catch (error) {
+          console.error("도형 요소 선택 중 오류:", error);
+        }
+      }
+    }, 500);
   };
 
   // 아이콘 요소 추가 핸들러
@@ -430,6 +486,12 @@ export function ToolbarLeft({ isMobileView = false }) {
             accept="image/*"
             onChange={handleImageBgSelect}
           />
+          <button
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            onClick={handleAddText}
+          >
+            <span className="text-xs">텍스트</span>
+          </button>
           <button
             className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
             onClick={handleAddShape}
