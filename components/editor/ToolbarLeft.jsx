@@ -30,13 +30,58 @@ export function ToolbarLeft({ isMobileView = false }) {
   const imageInputRef = useRef(null);
   const backgroundImageInputRef = useRef(null);
 
+  // 텍스트 옵션 상태 추가
+  const [textOptions, setTextOptions] = useState({
+    fontSize: 30,
+    fontFamily: "Arial",
+    color: "#000000",
+    hasStroke: false,
+    strokeColor: "#000000",
+    strokeWidth: 1,
+    fontWeight: "bold",
+    fontStyle: "normal",
+    underline: false,
+    textAlign: "left",
+  });
+
   // 선택된 요소 정보 추적
   const selectedElement = elements.find((el) => el.id === selectedElementId);
 
+  // 선택된 텍스트 요소의 옵션 업데이트
+  useEffect(() => {
+    if (selectedElement && selectedElement.type === "text") {
+      setTextOptions({
+        fontSize: selectedElement.fontSize || 30,
+        fontFamily: selectedElement.fontFamily || "Arial",
+        color: selectedElement.fill || "#000000",
+        hasStroke: (selectedElement.strokeWidth || 0) > 0,
+        strokeColor: selectedElement.stroke || "#000000",
+        strokeWidth: selectedElement.strokeWidth || 1,
+        fontWeight: selectedElement.fontWeight || "bold",
+        fontStyle: selectedElement.fontStyle || "normal",
+        underline: selectedElement.underline || false,
+        textAlign: selectedElement.textAlign || "left",
+      });
+    }
+  }, [selectedElement]);
+
   // 텍스트 요소 추가 핸들러
   const handleAddText = () => {
-    // 텍스트 추가 및 옵션 패널 열기
-    const id = `text_${Date.now()}`; // 명시적인 ID 생성
+    // 먼저 현재 선택된 객체 해제
+    if (window.fabricCanvasInstance) {
+      window.fabricCanvasInstance.discardActiveObject();
+      window.fabricCanvasInstance.requestRenderAll();
+    }
+
+    // 현재 선택된 요소 ID 초기화
+    setSelectedElementId(null);
+
+    // 더 고유한 ID 생성
+    const timestamp = Date.now();
+    const randomSuffix = Math.floor(Math.random() * 10000);
+    const id = `text_${timestamp}_${randomSuffix}`;
+
+    console.log("새 텍스트 요소 생성 시작:", id);
 
     // 텍스트 요소 추가
     const newTextElement = addTextElement({
@@ -86,16 +131,22 @@ export function ToolbarLeft({ isMobileView = false }) {
     // 바로 선택 상태로 설정
     setSelectedElementId(id);
 
-    console.log("텍스트 요소 생성 완료", {
-      id,
-    });
+    console.log("텍스트 요소 생성 완료:", { id });
 
     // 텍스트 객체는 생성 직후에 편집 모드로 진입해야 함
     setTimeout(() => {
       if (window.fabricCanvasInstance) {
         const fabricCanvas = window.fabricCanvasInstance;
-        const objects = fabricCanvas.getObjects();
-        const textObject = objects.find((obj) => obj.id === id);
+
+        // 캔버스 내의 모든 객체 디버깅
+        const allObjects = fabricCanvas.getObjects();
+        console.log(
+          "캔버스 객체 목록:",
+          allObjects.map((obj) => ({ id: obj.id, type: obj.type }))
+        );
+
+        // 해당 ID의 텍스트 객체 찾기
+        const textObject = allObjects.find((obj) => obj.id === id);
 
         if (textObject) {
           // 기존 선택 해제
@@ -152,10 +203,15 @@ export function ToolbarLeft({ isMobileView = false }) {
             }
           }, 300);
         } else {
-          console.log("텍스트 객체를 찾을 수 없음:", id);
+          console.error(
+            "텍스트 객체를 찾을 수 없음:",
+            id,
+            "캔버스 내 객체:",
+            allObjects.map((obj) => ({ id: obj.id, type: obj.type }))
+          );
         }
       }
-    }, 100); // 지연 시간을 줄여 더 빠르게 반응하도록 함
+    }, 200); // 지연 시간을 늘려 캔버스에 텍스트 요소가 추가될 시간을 더 확보
   };
 
   // 텍스트 옵션 변경 핸들러

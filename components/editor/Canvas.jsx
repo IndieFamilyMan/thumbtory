@@ -1308,7 +1308,58 @@ export default function Canvas({
             // 이미지 로드 시작
             img.src = element.src;
           } else if (element.type === "text") {
-            // 텍스트 요소는 기존 로직에서 처리됨
+            // 텍스트 요소 생성 및 추가
+            const textOptions = {
+              id: element.id,
+              text: element.text || "텍스트를 입력하세요",
+              left: element.x,
+              top: element.y,
+              width: element.width || 300,
+              fontSize: element.fontSize || 30,
+              fontFamily: element.fontFamily || "Arial",
+              fill: element.fill || "#000000",
+              textAlign: element.textAlign || "left",
+              fontWeight: element.fontWeight || "bold",
+              fontStyle: element.fontStyle || "normal",
+              underline: element.underline || false,
+              selectable: true,
+              evented: true,
+              hasControls: true,
+              hasBorders: true,
+              editable: true,
+              lockMovementX: false,
+              lockMovementY: false,
+              lockRotation: false,
+              lockScalingX: false,
+              lockScalingY: false,
+              hasRotatingPoint: true,
+              cornerColor: "#0084ff",
+              borderColor: "#0084ff",
+              padding: 10,
+              originX: "left",
+              originY: "top",
+              splitByGrapheme: false,
+              objectCaching: false,
+              strokeWidth: element.strokeWidth || 0,
+              stroke: element.stroke || "",
+              scaleX: element.scaleX || 1,
+              scaleY: element.scaleY || 1,
+              angle: element.rotation || 0,
+              opacity: element.opacity !== undefined ? element.opacity : 1,
+            };
+
+            const textObject = new Textbox(textOptions.text, textOptions);
+
+            // 캔버스에 텍스트 추가
+            fabricCanvasRef.current.add(textObject);
+            fabricCanvasRef.current.renderAll();
+
+            // 요소가 선택되어 있었다면 선택 상태로 설정
+            if (element.id === selectedElementId) {
+              fabricCanvasRef.current.setActiveObject(textObject);
+            }
+
+            console.log("텍스트 요소가 캔버스에 추가됨:", element.id);
           } else if (element.type === "shape") {
             const shapeObj = createShapeObject(element);
             if (shapeObj) {

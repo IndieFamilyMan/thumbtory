@@ -614,6 +614,43 @@ export const useEditorStore = create((set, get) => ({
     return newTextElement;
   },
 
+  // 이미지 요소 추가
+  addImageElement: (imageProps = {}) => {
+    const state = get();
+
+    // 이미지 요소의 기본 속성과 전달받은 속성 병합
+    const newImageElement = {
+      id: generateId(),
+      type: "image",
+      src: imageProps.src,
+      x: imageProps.x !== undefined ? imageProps.x : 100,
+      y: imageProps.y !== undefined ? imageProps.y : 100,
+      width: imageProps.width || 200,
+      height: imageProps.height || 200,
+      scaleX: imageProps.scaleX || 1,
+      scaleY: imageProps.scaleY || 1,
+      rotation: imageProps.rotation || 0,
+      opacity: imageProps.opacity !== undefined ? imageProps.opacity : 1,
+      ...imageProps,
+    };
+
+    // 요소 배열에 새 이미지 요소 추가
+    const updatedElements = [...state.elements, newImageElement];
+
+    // 상태 업데이트 및 히스토리에 저장
+    set({
+      elements: updatedElements,
+      selectedElementId: newImageElement.id, // 추가된 이미지 요소를 자동 선택
+    });
+
+    // 상태 저장
+    setTimeout(() => {
+      get().saveState();
+    }, 100);
+
+    return newImageElement;
+  },
+
   // 배경 이미지 설정
   setBackgroundFromImage: (file) => {
     if (!file) return;
