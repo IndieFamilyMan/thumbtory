@@ -3,7 +3,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Textbox } from "fabric";
 import { useEditorStore } from "@/store/editor";
-import { Type, TextCursorInput } from "lucide-react";
+import {
+  Type,
+  TextCursorInput,
+  Bold,
+  Italic,
+  Underline,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
@@ -506,6 +515,7 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
 
   // Handle text alignment change
   const handleTextAlignChange = (align) => {
+    console.log("Text Align Change:", { current: textAlign, new: align });
     setTextAlign(align);
 
     const textObject = getSelectedTextObject();
@@ -522,6 +532,7 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
   // Toggle bold text
   const handleToggleBold = () => {
     const newBoldState = !isBold;
+    console.log("Toggle Bold:", { current: isBold, new: newBoldState });
     setIsBold(newBoldState);
 
     const textObject = getSelectedTextObject();
@@ -542,6 +553,7 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
   // Toggle italic text
   const handleToggleItalic = () => {
     const newItalicState = !isItalic;
+    console.log("Toggle Italic:", { current: isItalic, new: newItalicState });
     setIsItalic(newItalicState);
 
     const textObject = getSelectedTextObject();
@@ -562,6 +574,10 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
   // Toggle underline text
   const handleToggleUnderline = () => {
     const newUnderlineState = !isUnderline;
+    console.log("Toggle Underline:", {
+      current: isUnderline,
+      new: newUnderlineState,
+    });
     setIsUnderline(newUnderlineState);
 
     const textObject = getSelectedTextObject();
@@ -945,39 +961,89 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
           <div className="flex gap-2 h-10">
             <button
               id="bold-text"
-              className={cn(
-                "px-3 border rounded-l-md flex-1 transition-colors flex items-center justify-center",
-                isBold
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-              onClick={handleToggleBold}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "3px",
+                padding: "6px",
+                borderRadius: isBold
+                  ? "0.375rem 0 0 0.375rem"
+                  : "0.375rem 0 0 0.375rem",
+                backgroundColor: isBold ? "#000000" : "white",
+                color: isBold ? "white" : "#000000",
+                border: `1px solid ${isBold ? "#000000" : "#d1d5db"}`,
+                boxShadow: isBold ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                fontWeight: isBold ? "bold" : "normal",
+                transition: "all 0.2s",
+                fontSize: "0.875rem",
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                handleToggleBold();
+              }}
+              title="굵게"
             >
+              <Bold className="w-3.5 h-3.5" />
               굵게
             </button>
             <button
               id="italic-text"
-              className={cn(
-                "px-3 border flex-1 transition-colors flex items-center justify-center",
-                isItalic
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-              onClick={handleToggleItalic}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "3px",
+                padding: "6px",
+                backgroundColor: isItalic ? "#000000" : "white",
+                color: isItalic ? "white" : "#000000",
+                border: `1px solid ${isItalic ? "#000000" : "#d1d5db"}`,
+                boxShadow: isItalic ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                transition: "all 0.2s",
+                fontSize: "0.875rem",
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                handleToggleItalic();
+              }}
+              title="기울임"
             >
-              기울임
+              <Italic className="w-3.5 h-3.5" />
+              <span style={{ fontStyle: isItalic ? "italic" : "normal" }}>
+                기울임
+              </span>
             </button>
             <button
               id="underline-text"
-              className={cn(
-                "px-3 border rounded-r-md flex-1 transition-colors flex items-center justify-center",
-                isUnderline
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-              onClick={handleToggleUnderline}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "3px",
+                padding: "6px",
+                borderRadius: "0 0.375rem 0.375rem 0",
+                backgroundColor: isUnderline ? "#000000" : "white",
+                color: isUnderline ? "white" : "#000000",
+                border: `1px solid ${isUnderline ? "#000000" : "#d1d5db"}`,
+                boxShadow: isUnderline ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                transition: "all 0.2s",
+                fontSize: "0.875rem",
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                handleToggleUnderline();
+              }}
+              title="밑줄"
             >
-              밑줄
+              <Underline className="w-3.5 h-3.5" />
+              <span
+                style={{ textDecoration: isUnderline ? "underline" : "none" }}
+              >
+                밑줄
+              </span>
             </button>
           </div>
         </div>
@@ -987,36 +1053,88 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
           <label className="text-sm font-medium block">정렬:</label>
           <div className="flex gap-2 h-10">
             <button
-              className={cn(
-                "px-3 border rounded-l-md flex-1 transition-colors flex items-center justify-center",
-                textAlign === "left"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-              onClick={() => handleTextAlignChange("left")}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "3px",
+                padding: "6px",
+                borderRadius: "0.375rem 0 0 0.375rem",
+                backgroundColor: textAlign === "left" ? "#000000" : "white",
+                color: textAlign === "left" ? "white" : "#000000",
+                border: `1px solid ${
+                  textAlign === "left" ? "#000000" : "#d1d5db"
+                }`,
+                boxShadow:
+                  textAlign === "left" ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                transition: "all 0.2s",
+                fontSize: "0.875rem",
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                handleTextAlignChange("left");
+              }}
+              title="좌측 정렬"
             >
+              <AlignLeft className="w-3.5 h-3.5" />
               좌측
             </button>
             <button
-              className={cn(
-                "px-3 border flex-1 transition-colors flex items-center justify-center",
-                textAlign === "center"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-              onClick={() => handleTextAlignChange("center")}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "3px",
+                padding: "6px",
+                backgroundColor: textAlign === "center" ? "#000000" : "white",
+                color: textAlign === "center" ? "white" : "#000000",
+                border: `1px solid ${
+                  textAlign === "center" ? "#000000" : "#d1d5db"
+                }`,
+                boxShadow:
+                  textAlign === "center"
+                    ? "0 1px 3px rgba(0,0,0,0.12)"
+                    : "none",
+                transition: "all 0.2s",
+                fontSize: "0.875rem",
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                handleTextAlignChange("center");
+              }}
+              title="중앙 정렬"
             >
+              <AlignCenter className="w-3.5 h-3.5" />
               중앙
             </button>
             <button
-              className={cn(
-                "px-3 border rounded-r-md flex-1 transition-colors flex items-center justify-center",
-                textAlign === "right"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-              onClick={() => handleTextAlignChange("right")}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "3px",
+                padding: "6px",
+                borderRadius: "0 0.375rem 0.375rem 0",
+                backgroundColor: textAlign === "right" ? "#000000" : "white",
+                color: textAlign === "right" ? "white" : "#000000",
+                border: `1px solid ${
+                  textAlign === "right" ? "#000000" : "#d1d5db"
+                }`,
+                boxShadow:
+                  textAlign === "right" ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                transition: "all 0.2s",
+                fontSize: "0.875rem",
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                handleTextAlignChange("right");
+              }}
+              title="우측 정렬"
             >
+              <AlignRight className="w-3.5 h-3.5" />
               우측
             </button>
           </div>

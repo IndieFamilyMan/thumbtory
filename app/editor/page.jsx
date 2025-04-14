@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { Header } from "@/components/layout/Header";
 import { ToolbarLeft } from "@/components/editor/ToolbarLeft";
 import Canvas from "@/components/editor/Canvas";
-import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
+
 import { PlatformPreview } from "@/components/editor/PlatformPreview";
 import { Footer } from "@/components/editor/Footer";
 import TextEditor from "@/components/editor/TextEditor";
