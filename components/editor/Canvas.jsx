@@ -816,7 +816,7 @@ export default function Canvas({
       // 캔버스 설정
       newCanvas.selection = true;
       newCanvas.uniformScaling = false;
-      newCanvas.centeredScaling = true;
+      newCanvas.centeredScaling = false;
       newCanvas.centeredRotation = true;
 
       // 명시적으로 drawing mode 비활성화
@@ -937,8 +937,8 @@ export default function Canvas({
 
               // 이미지 속성 설정
               fabricImg.set({
-                originX: "center",
-                originY: "center",
+                originX: "left",
+                originY: "top",
                 left: canvasWidth / 2,
                 top: canvasHeight / 2,
               });
@@ -1260,10 +1260,7 @@ export default function Canvas({
           } else if (element.type === "text") {
             // 텍스트 요소는 기존 로직에서 처리됨
           } else if (element.type === "shape") {
-            const shapeObj = createShapeObject(
-              element,
-              fabricCanvasRef.current
-            );
+            const shapeObj = createShapeObject(element);
             if (shapeObj) {
               fabricCanvasRef.current.add(shapeObj);
               // 요소 ID 선택 상태 확인
@@ -1375,84 +1372,96 @@ export default function Canvas({
     };
   }, [isMobile]);
 
-  // 도형 객체 생성 함수 - 다른 유틸리티 함수들 바로 아래에 추가
-  const createShapeObject = (elementData, canvas) => {
-    if (!canvas) return null;
+  // 도형 객체 생성 함수
+  const createShapeObject = (element) => {
+    let shapeObject;
 
-    let shapeObj;
-    const {
-      shape,
-      x,
-      y,
-      width,
-      height,
-      fill,
-      stroke,
-      strokeWidth,
-      rotation,
-      opacity,
-    } = elementData;
-
-    // 도형 타입에 따라 적절한 객체 생성
-    switch (shape) {
-      case "circle":
-        shapeObj = new Circle({
-          left: x,
-          top: y,
-          radius: width / 2,
-          fill: fill || "#3b82f6",
-          stroke: stroke || "#1d4ed8",
-          strokeWidth: strokeWidth || 0,
-          angle: rotation || 0,
-          opacity: opacity !== undefined ? opacity : 1,
-        });
-        break;
-      case "triangle":
-        shapeObj = new Triangle({
-          left: x,
-          top: y,
-          width: width,
-          height: height,
-          fill: fill || "#3b82f6",
-          stroke: stroke || "#1d4ed8",
-          strokeWidth: strokeWidth || 0,
-          angle: rotation || 0,
-          opacity: opacity !== undefined ? opacity : 1,
-        });
-        break;
-      case "rectangle":
-      default:
-        shapeObj = new Rect({
-          left: x,
-          top: y,
-          width: width,
-          height: height,
-          fill: fill || "#3b82f6",
-          stroke: stroke || "#1d4ed8",
-          strokeWidth: strokeWidth || 0,
-          angle: rotation || 0,
-          opacity: opacity !== undefined ? opacity : 1,
-        });
-        break;
-    }
-
-    if (shapeObj) {
-      // 공통 속성 설정
-      shapeObj.set({
-        id: elementData.id,
-        customType: "shape", // 도형 객체 식별을 위한 타입
-        shape: shape, // 도형 유형 저장
+    // 도형 유형에 따라 객체 생성
+    if (element.shape === "rectangle") {
+      shapeObject = new Rect({
+        left: element.x,
+        top: element.y,
+        width: element.width,
+        height: element.height,
+        fill: element.fill || "#3b82f6",
+        stroke: element.stroke || "#1d4ed8",
+        strokeWidth: element.strokeWidth || 0,
+        rx: element.cornerRadius || 0,
+        ry: element.cornerRadius || 0,
+        angle: element.rotation || 0,
+        opacity: element.opacity !== undefined ? element.opacity : 1,
+        id: element.id,
+        customType: "shape",
         selectable: true,
         hasControls: true,
         hasBorders: true,
+        centeredScaling: false, // 비대칭 스케일링을 위해 false로 설정
+        centeredRotation: true, // 회전은 중앙 기준으로 유지
+        originX: "left", // 왼쪽을 기준점으로 설정
+        originY: "top", // 위쪽을 기준점으로 설정
+        lockUniScaling: false, // 비율 고정 해제
         transparentCorners: false,
-        cornerColor: "#000000",
+        cornerColor: "#0084ff",
+        borderColor: "#0084ff",
         cornerSize: 8,
-        strokeUniform: true,
+        padding: 5,
+      });
+    } else if (element.shape === "circle") {
+      shapeObject = new Circle({
+        left: element.x,
+        top: element.y,
+        radius: Math.min(element.width, element.height) / 2,
+        fill: element.fill || "#3b82f6",
+        stroke: element.stroke || "#1d4ed8",
+        strokeWidth: element.strokeWidth || 0,
+        angle: element.rotation || 0,
+        opacity: element.opacity !== undefined ? element.opacity : 1,
+        id: element.id,
+        customType: "shape",
+        selectable: true,
+        hasControls: true,
+        hasBorders: true,
+        centeredScaling: false, // 비대칭 스케일링을 위해 false로 설정
+        centeredRotation: true, // 회전은 중앙 기준으로 유지
+        originX: "left", // 왼쪽을 기준점으로 설정
+        originY: "top", // 위쪽을 기준점으로 설정
+        lockUniScaling: false, // 비율 고정 해제
+        transparentCorners: false,
+        cornerColor: "#0084ff",
+        borderColor: "#0084ff",
+        cornerSize: 8,
+        padding: 5,
+      });
+    } else if (element.shape === "triangle") {
+      shapeObject = new Triangle({
+        left: element.x,
+        top: element.y,
+        width: element.width,
+        height: element.height,
+        fill: element.fill || "#3b82f6",
+        stroke: element.stroke || "#1d4ed8",
+        strokeWidth: element.strokeWidth || 0,
+        angle: element.rotation || 0,
+        opacity: element.opacity !== undefined ? element.opacity : 1,
+        id: element.id,
+        customType: "shape",
+        selectable: true,
+        hasControls: true,
+        hasBorders: true,
+        centeredScaling: false, // 비대칭 스케일링을 위해 false로 설정
+        centeredRotation: true, // 회전은 중앙 기준으로 유지
+        originX: "left", // 왼쪽을 기준점으로 설정
+        originY: "top", // 위쪽을 기준점으로 설정
+        lockUniScaling: false, // 비율 고정 해제
+        transparentCorners: false,
+        cornerColor: "#0084ff",
+        borderColor: "#0084ff",
+        cornerSize: 8,
+        padding: 5,
       });
     }
 
-    return shapeObj;
+    return shapeObject;
   };
 
   // 캔버스 UI 렌더링
