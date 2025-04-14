@@ -195,6 +195,95 @@ export default function Canvas({
     }
   };
 
+  // 요소 순서 동기화 함수 (이 위치로 이동)
+  const syncElementsOrder = useCallback(() => {
+    if (!fabricCanvasRef.current) return;
+
+    try {
+      // 캔버스 객체와 Zustand 상태 요소를 가져옴
+      const canvas = fabricCanvasRef.current;
+      const storeElements = [...useEditorStore.getState().elements];
+
+      if (storeElements.length === 0) return;
+
+      console.log("요소 순서 동기화 시작");
+
+      // 캔버스의 모든 객체 (그리드 제외)
+      const canvasObjects = canvas
+        .getObjects()
+        .filter((obj) => !obj.id?.startsWith("grid-"));
+
+      // 캔버스 객체가 없으면 리턴
+      if (canvasObjects.length === 0) return;
+
+      // 객체들의 현재 상태 로깅
+      console.log("요소 순서 동기화:", {
+        storeElementsCount: storeElements.length,
+        canvasObjectsCount: canvasObjects.length,
+      });
+
+      // 새 객체들의 z-index를 유지하기 위해 이 함수를 일시적으로 비활성화
+      const newObjectIds = canvasObjects
+        .filter(
+          (obj) => obj.id && !storeElements.some((el) => el.id === obj.id)
+        )
+        .map((obj) => obj.id);
+
+      if (newObjectIds.length > 0) {
+        console.log("새로 추가된 객체:", newObjectIds);
+        return; // 새 객체가 추가된 경우 z-index 재정렬하지 않음
+      }
+
+      // 현재 캔버스 선택 상태 저장
+      const activeObject = canvas.getActiveObject();
+      canvas.discardActiveObject();
+
+      // 요소들을 z-index 기준으로 정렬 (zIndex 값이 높을수록 위에 배치)
+      // 스토어 요소를 zIndex 기준으로 정렬 (오름차순)
+      const sortedElements = [...storeElements].sort((a, b) => {
+        const aZIndex = a.zIndex !== undefined ? a.zIndex : 0;
+        const bZIndex = b.zIndex !== undefined ? b.zIndex : 0;
+        return aZIndex - bZIndex;
+      });
+
+      console.log(
+        "정렬된 요소:",
+        sortedElements.map((el) => ({ id: el.id, zIndex: el.zIndex }))
+      );
+
+      // 새로운 순서대로 객체를 배치 - 기존 객체를 모두 제거하고 다시 추가
+      // 각 요소를 임시 배열에 저장
+      const objectsToAdd = [];
+
+      // 각 요소에 해당하는 캔버스 객체 찾기
+      sortedElements.forEach((element) => {
+        const obj = canvasObjects.find((obj) => obj.id === element.id);
+        if (obj) {
+          // 캔버스에서 객체 제거
+          canvas.remove(obj);
+          // 배열에 추가
+          objectsToAdd.push(obj);
+        }
+      });
+
+      // 정렬된 순서대로 객체 다시 추가
+      objectsToAdd.forEach((obj) => {
+        canvas.add(obj);
+      });
+
+      // 선택 상태 복원
+      if (activeObject && !activeObject._removed) {
+        canvas.setActiveObject(activeObject);
+      }
+
+      // 순서가 변경된 후 캔버스 다시 그리기
+      canvas.requestRenderAll();
+      console.log("요소 순서 동기화 완료");
+    } catch (err) {
+      console.error("요소 순서 동기화 중 오류:", err);
+    }
+  }, []);
+
   // 가이드 그리드 제거 함수
   const removeGuideGrid = () => {
     if (!fabricCanvasRef.current) return;
@@ -1270,8 +1359,15 @@ export default function Canvas({
     if (newElements.length > 0) {
       console.log(`캔버스에 추가할 새 요소: ${newElements.length}개`);
 
+      // z-index 기준으로 정렬 (높은 값이 위에 표시되도록)
+      const sortedNewElements = [...newElements].sort((a, b) => {
+        const aZIndex = a.zIndex !== undefined ? a.zIndex : 0;
+        const bZIndex = b.zIndex !== undefined ? b.zIndex : 0;
+        return aZIndex - bZIndex; // 낮은 z-index가 먼저 추가 (아래에 배치)
+      });
+
       // 새 요소들을 캔버스에 추가
-      newElements.forEach((element) => {
+      sortedNewElements.forEach((element) => {
         try {
           if (element.type === "image" && element.src) {
             // 이미지 요소 추가
@@ -1293,17 +1389,21 @@ export default function Canvas({
                 opacity: element.opacity || 1,
                 selectable: true,
                 evented: true,
+                data: { zIndex: element.zIndex }, // zIndex 정보 저장
               });
 
               // 캔버스에 이미지 추가
               const canvas = fabricCanvasRef.current;
               canvas.add(fabricImage);
 
-              // 이미지 요소를 맨 앞으로 가져오기 (시각적으로 맨 위)
-              canvas.setActiveObject(fabricImage);
-              canvas.bringObjectToFront(fabricImage);
+              // moveTo 대신 다음 방식으로 요소 순서 조정
+              // 이미지가 추가될 때 순서 지정은 syncElementsOrder()에서 일괄적으로 처리됨
+
               canvas.renderAll();
               console.log("이미지 요소가 캔버스에 추가됨:", element.id);
+
+              // 추가 완료 후 전체 요소 순서 동기화
+              syncElementsOrder();
             };
 
             img.onerror = (error) => {
@@ -1351,6 +1451,7 @@ export default function Canvas({
               scaleY: element.scaleY || 1,
               angle: element.rotation || 0,
               opacity: element.opacity !== undefined ? element.opacity : 1,
+              data: { zIndex: element.zIndex }, // zIndex 정보 저장
             };
 
             const textObject = new Textbox(textOptions.text, textOptions);
@@ -1359,31 +1460,40 @@ export default function Canvas({
             const textCanvas = fabricCanvasRef.current;
             textCanvas.add(textObject);
 
-            // 텍스트 요소를 맨 앞으로 가져오기 (시각적으로 맨 위)
-            textCanvas.setActiveObject(textObject);
-            textCanvas.bringObjectToFront(textObject);
-            textCanvas.renderAll();
+            // 스토어에 텍스트 내용 업데이트 (비어있을 경우)
+            if (!element.text || element.text === "") {
+              updateElementProperty(element.id, "text", "텍스트를 입력하세요");
+            }
 
             // 요소가 선택되어 있었다면 선택 상태로 설정
             if (element.id === selectedElementId) {
               textCanvas.setActiveObject(textObject);
             }
 
+            textCanvas.renderAll();
             console.log("텍스트 요소가 캔버스에 추가됨:", element.id);
+
+            // 추가 완료 후 전체 요소 순서 동기화
+            syncElementsOrder();
           } else if (element.type === "shape") {
             const shapeObj = createShapeObject(element);
             if (shapeObj) {
+              // zIndex 정보 추가
+              shapeObj.data = { zIndex: element.zIndex };
+
               const shapeCanvas = fabricCanvasRef.current;
               shapeCanvas.add(shapeObj);
-
-              // 도형 요소를 맨 앞으로 가져오기 (시각적으로 맨 위)
-              shapeCanvas.setActiveObject(shapeObj);
-              shapeCanvas.bringObjectToFront(shapeObj);
 
               // 요소 ID 선택 상태 확인
               if (element.id === selectedElementId) {
                 shapeCanvas.setActiveObject(shapeObj);
               }
+
+              shapeCanvas.renderAll();
+              console.log("도형 요소가 캔버스에 추가됨:", element.id);
+
+              // 추가 완료 후 전체 요소 순서 동기화
+              syncElementsOrder();
             }
           } else if (element.type === "icon") {
             // 아이콘 요소는 기존 로직에서 처리됨
@@ -1393,79 +1503,13 @@ export default function Canvas({
         }
       });
     }
-
-    // 요소 순서 동기화
-    syncElementsOrder();
-  }, [elements, canvasReady]);
-
-  // 요소 순서 동기화 함수
-  const syncElementsOrder = () => {
-    if (!fabricCanvasRef.current || !canvasReady) return;
-
-    try {
-      const canvas = fabricCanvasRef.current;
-
-      // 스토어에서 현재 요소 목록 가져오기
-      const { elements } = useEditorStore.getState();
-
-      // 요소가 없으면 처리하지 않음
-      if (!elements || elements.length === 0) return;
-
-      // 캔버스 객체 중 요소 ID가 있는 것만 필터링
-      const validObjects = canvas.getObjects().filter((obj) => obj.id);
-
-      // 매핑: 요소 ID에 대한 인덱스 저장
-      const elementIndexMap = {};
-      elements.forEach((element, index) => {
-        if (element.id) {
-          elementIndexMap[element.id] = index;
-        }
-      });
-
-      // 모든 객체를 Z-index 기준으로 재정렬
-      // elements 배열의 인덱스가 낮을수록 아래에 위치 (먼저 그려짐)
-      const sortedObjects = [...validObjects].sort((a, b) => {
-        const aIndex =
-          elementIndexMap[a.id] !== undefined ? elementIndexMap[a.id] : -1;
-        const bIndex =
-          elementIndexMap[b.id] !== undefined ? elementIndexMap[b.id] : -1;
-        return aIndex - bIndex;
-      });
-
-      // 현재 선택된 객체의 ID를 저장 (있는 경우)
-      const activeObject = canvas.getActiveObject();
-      const activeObjectId = activeObject ? activeObject.id : null;
-
-      // 먼저 캔버스에서 선택 해제
-      canvas.discardActiveObject();
-
-      // 모든 오브젝트를 캔버스에서 제거 (배경 설정은 유지됨)
-      validObjects.forEach((obj) => {
-        canvas.remove(obj);
-      });
-
-      // 정렬된 순서대로 다시 객체 추가
-      sortedObjects.forEach((obj) => {
-        canvas.add(obj);
-      });
-
-      // 선택 상태 복원 (ID 기반으로 새로 추가된 객체를 찾음)
-      if (activeObjectId) {
-        const newObjects = canvas.getObjects();
-        const objectToSelect = newObjects.find(
-          (obj) => obj.id === activeObjectId
-        );
-        if (objectToSelect) {
-          canvas.setActiveObject(objectToSelect);
-        }
-      }
-
-      // 변경사항 반영
-      canvas.requestRenderAll();
-    } catch (error) {
-      console.error("요소 순서 동기화 중 오류:", error);
-    }
-  };
+  }, [
+    elements,
+    canvasReady,
+    selectedElementId,
+    updateElementProperty,
+    syncElementsOrder,
+  ]);
 
   // 화면 크기에 따라 모바일 여부 감지
   useEffect(() => {

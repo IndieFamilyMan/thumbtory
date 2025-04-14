@@ -299,18 +299,25 @@ export const useEditorStore = create((set, get) => ({
         ...elementData,
         id: generateId(),
         selected: true,
+        // z-index 정보 추가 - 항상 최상단에 위치하도록
+        zIndex: elements.length + 1,
       };
 
+      // 기존 요소들의 selected 속성만 변경하고 순서는 유지
+      const updatedElements = [
+        ...elements.map((e) => ({ ...e, selected: false })),
+        newElement,
+      ];
+
       set({
-        elements: [
-          ...elements.map((e) => ({ ...e, selected: false })),
-          newElement,
-        ],
+        elements: updatedElements,
         selectedElementId: newElement.id,
       });
 
       // 최소한의 로그만 유지
-      console.log(`요소 추가 완료: ${elementData.type}`);
+      console.log(
+        `요소 추가 완료: ${elementData.type}, z-index: ${newElement.zIndex}`
+      );
     });
   },
 
@@ -573,6 +580,13 @@ export const useEditorStore = create((set, get) => ({
   // 텍스트 요소 추가
   addTextElement: (textProps = {}) => {
     const state = get();
+    const elements = state.elements;
+
+    // 가장 높은 z-index 값 찾기
+    const highestZIndex =
+      elements.length > 0
+        ? Math.max(...elements.map((el) => el.zIndex || 0)) + 1
+        : 1;
 
     // 텍스트 요소의 기본 속성과 전달받은 속성 병합
     const newTextElement = {
@@ -594,6 +608,7 @@ export const useEditorStore = create((set, get) => ({
       scaleX: textProps.scaleX || 1,
       scaleY: textProps.scaleY || 1,
       rotation: textProps.rotation || 0,
+      zIndex: highestZIndex, // 요소 z-index 명시적 설정
       ...textProps,
     };
 
@@ -611,12 +626,22 @@ export const useEditorStore = create((set, get) => ({
       get().saveState();
     }, 100);
 
+    console.log(
+      `텍스트 요소 추가 완료: ${newTextElement.id}, z-index: ${newTextElement.zIndex}`
+    );
     return newTextElement;
   },
 
   // 이미지 요소 추가
   addImageElement: (imageProps = {}) => {
     const state = get();
+    const elements = state.elements;
+
+    // 가장 높은 z-index 값 찾기
+    const highestZIndex =
+      elements.length > 0
+        ? Math.max(...elements.map((el) => el.zIndex || 0)) + 1
+        : 1;
 
     // 이미지 요소의 기본 속성과 전달받은 속성 병합
     const newImageElement = {
@@ -631,6 +656,7 @@ export const useEditorStore = create((set, get) => ({
       scaleY: imageProps.scaleY || 1,
       rotation: imageProps.rotation || 0,
       opacity: imageProps.opacity !== undefined ? imageProps.opacity : 1,
+      zIndex: highestZIndex, // 요소 z-index 명시적 설정
       ...imageProps,
     };
 
@@ -648,6 +674,9 @@ export const useEditorStore = create((set, get) => ({
       get().saveState();
     }, 100);
 
+    console.log(
+      `이미지 요소 추가 완료: ${newImageElement.id}, z-index: ${newImageElement.zIndex}`
+    );
     return newImageElement;
   },
 
