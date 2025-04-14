@@ -1296,8 +1296,13 @@ export default function Canvas({
               });
 
               // 캔버스에 이미지 추가
-              fabricCanvasRef.current.add(fabricImage);
-              fabricCanvasRef.current.renderAll();
+              const canvas = fabricCanvasRef.current;
+              canvas.add(fabricImage);
+
+              // 이미지 요소를 맨 앞으로 가져오기 (시각적으로 맨 위)
+              canvas.setActiveObject(fabricImage);
+              canvas.bringObjectToFront(fabricImage);
+              canvas.renderAll();
               console.log("이미지 요소가 캔버스에 추가됨:", element.id);
             };
 
@@ -1351,22 +1356,33 @@ export default function Canvas({
             const textObject = new Textbox(textOptions.text, textOptions);
 
             // 캔버스에 텍스트 추가
-            fabricCanvasRef.current.add(textObject);
-            fabricCanvasRef.current.renderAll();
+            const textCanvas = fabricCanvasRef.current;
+            textCanvas.add(textObject);
+
+            // 텍스트 요소를 맨 앞으로 가져오기 (시각적으로 맨 위)
+            textCanvas.setActiveObject(textObject);
+            textCanvas.bringObjectToFront(textObject);
+            textCanvas.renderAll();
 
             // 요소가 선택되어 있었다면 선택 상태로 설정
             if (element.id === selectedElementId) {
-              fabricCanvasRef.current.setActiveObject(textObject);
+              textCanvas.setActiveObject(textObject);
             }
 
             console.log("텍스트 요소가 캔버스에 추가됨:", element.id);
           } else if (element.type === "shape") {
             const shapeObj = createShapeObject(element);
             if (shapeObj) {
-              fabricCanvasRef.current.add(shapeObj);
+              const shapeCanvas = fabricCanvasRef.current;
+              shapeCanvas.add(shapeObj);
+
+              // 도형 요소를 맨 앞으로 가져오기 (시각적으로 맨 위)
+              shapeCanvas.setActiveObject(shapeObj);
+              shapeCanvas.bringObjectToFront(shapeObj);
+
               // 요소 ID 선택 상태 확인
               if (element.id === selectedElementId) {
-                fabricCanvasRef.current.setActiveObject(shapeObj);
+                shapeCanvas.setActiveObject(shapeObj);
               }
             }
           } else if (element.type === "icon") {

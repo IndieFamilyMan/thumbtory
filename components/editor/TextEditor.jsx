@@ -427,7 +427,7 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
 
     const activeObject = localCanvas.getActiveObject();
     if (activeObject) {
-      localCanvas.bringForward(activeObject);
+      localCanvas.bringObjectToFront(activeObject);
       localCanvas.renderAll();
       saveState();
     }
@@ -439,7 +439,7 @@ export default function TextEditor({ canvas, onTextUpdated, className = "" }) {
 
     const activeObject = localCanvas.getActiveObject();
     if (activeObject) {
-      localCanvas.sendBackwards(activeObject);
+      localCanvas.sendObjectToBack(activeObject);
       localCanvas.renderAll();
       saveState();
     }

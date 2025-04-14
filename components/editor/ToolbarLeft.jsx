@@ -174,6 +174,10 @@ export function ToolbarLeft({ isMobileView = false }) {
           // 스토어에 텍스트 내용도 업데이트
           updateElementProperty(id, "text", "텍스트를 입력하세요");
 
+          // 텍스트 객체를 맨 앞으로 가져오기 (시각적으로 맨 위)
+          fabricCanvas.setActiveObject(textObject);
+          fabricCanvas.bringObjectToFront(textObject);
+
           // 텍스트 객체 선택 및 렌더링
           fabricCanvas.setActiveObject(textObject);
           fabricCanvas.requestRenderAll();
@@ -346,6 +350,10 @@ export function ToolbarLeft({ isMobileView = false }) {
 
             // 선택만 하고 맨 위로 가져오지 않음
             canvas.setActiveObject(imgObj);
+
+            // 이미지 객체를 맨 앞으로 가져오기 (시각적으로 맨 위)
+            canvas.bringObjectToFront(imgObj);
+
             canvas.renderAll();
             setSelectedElementId(newImage.id);
           }
@@ -436,7 +444,7 @@ export function ToolbarLeft({ isMobileView = false }) {
         const activeObject = canvas.getActiveObject();
         if (activeObject) {
           // Fabric 캔버스에서의 객체 순서 변경
-          canvas.bringObjectForward(activeObject);
+          canvas.bringObjectToFront(activeObject);
           canvas.renderAll();
 
           // 스토어에서 직접 undo/saveState 함수만 호출
@@ -456,7 +464,7 @@ export function ToolbarLeft({ isMobileView = false }) {
         const activeObject = canvas.getActiveObject();
         if (activeObject) {
           // Fabric 캔버스에서의 객체 순서 변경
-          canvas.sendObjectBackwards(activeObject);
+          canvas.sendObjectToBack(activeObject);
           canvas.renderAll();
 
           // 스토어에서 직접 undo/saveState 함수만 호출
@@ -553,6 +561,10 @@ export function ToolbarLeft({ isMobileView = false }) {
 
           // 선택만 하고 맨 위로 가져오지 않음
           canvas.setActiveObject(shapeObject);
+
+          // 도형 객체를 맨 앞으로 가져오기 (시각적으로 맨 위)
+          canvas.bringObjectToFront(shapeObject);
+
           canvas.renderAll();
           setSelectedElementId(id);
         }
