@@ -284,78 +284,7 @@ export function ExportModal({ onClose, onExport }) {
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm mb-1">대체 텍스트 (alt)</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border rounded-md"
-                value={metaData.altText}
-                onChange={(e) =>
-                  setMetaData({ ...metaData, altText: e.target.value })
-                }
-                placeholder="이미지 설명 (예: 2024 봄 패션 트렌드)"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">키워드 (쉼표로 구분)</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border rounded-md"
-                value={metaData.keywords}
-                onChange={(e) =>
-                  setMetaData({ ...metaData, keywords: e.target.value })
-                }
-                placeholder="패션, 트렌드, 봄"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">제목</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border rounded-md"
-                value={metaData.title}
-                onChange={(e) =>
-                  setMetaData({ ...metaData, title: e.target.value })
-                }
-                placeholder="이미지 제목"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">저작자</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border rounded-md"
-                value={metaData.author}
-                onChange={(e) =>
-                  setMetaData({ ...metaData, author: e.target.value })
-                }
-                placeholder="저작자 이름"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">저작권</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border rounded-md"
-                value={metaData.copyright}
-                onChange={(e) =>
-                  setMetaData({ ...metaData, copyright: e.target.value })
-                }
-                placeholder="© 2024 회사명"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">설명</label>
-              <textarea
-                className="w-full px-3 py-2 border rounded-md"
-                value={metaData.description}
-                onChange={(e) =>
-                  setMetaData({ ...metaData, description: e.target.value })
-                }
-                placeholder="이미지에 대한 상세 설명"
-                rows={3}
-              />
-            </div>
+
             <div>
               <label className="block text-sm mb-1">파일 형식</label>
               <div className="flex flex-wrap gap-4 mt-2">

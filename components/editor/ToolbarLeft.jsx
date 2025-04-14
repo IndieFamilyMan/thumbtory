@@ -495,7 +495,14 @@ export function ToolbarLeft({ isMobileView = false }) {
     console.log("도형 추가");
     const id = `shape_${Date.now()}`;
 
-    // addElement 사용하여 도형 추가
+    // 먼저 기존 요소들의 zIndex 값을 업데이트
+    const updatedElements = elements.map((element) => ({
+      ...element,
+      zIndex: (element.zIndex || 0) + 1, // zIndex가 없는 경우 0으로 처리
+    }));
+
+    // 도형 추가 전에 이미 존재하는 요소들의 zIndex 증가시킨 상태로 추가
+    // addElement 사용하여 도형 추가 (zIndex를 1로 설정하여 가장 아래에 위치)
     const newShape = addElement({
       id,
       type: "shape",
@@ -507,12 +514,14 @@ export function ToolbarLeft({ isMobileView = false }) {
       fill: "#3b82f6", // 파란색
       stroke: "#1d4ed8", // 테두리 색상
       strokeWidth: 0, // 테두리 두께
+      zIndex: 1, // 명시적으로 zIndex를 1로 설정 (맨 아래에 위치)
+      existingElements: updatedElements, // 기존 요소들의 정보를 함께 전달
     });
 
     // 상태 저장 (실행 취소/다시 실행용)
     saveState();
 
-    console.log("도형 요소 생성 완료:", { id, zIndex: elements.length + 1 });
+    console.log("도형 요소 생성 완료:", { id, zIndex: 1 });
 
     // 캔버스 새로고침 및 자동으로 새 요소 선택
     setTimeout(() => {

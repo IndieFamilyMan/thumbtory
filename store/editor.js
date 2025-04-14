@@ -288,24 +288,32 @@ export const useEditorStore = create((set, get) => ({
   // 요소 관리
   addElement: (elementData) => {
     get().saveToHistory(() => {
+      // existingElements가 있는 경우 이를 사용하고, 없으면 현재 요소 배열을 사용
       const { elements } = get();
+      const baseElements = elementData.existingElements || elements;
+
+      // existingElements 속성 제거 (불필요한 속성 제거)
+      const { existingElements, ...cleanElementData } = elementData;
 
       // 이미지 요소인 경우 추가 처리
-      if (elementData.type === "image") {
+      if (cleanElementData.type === "image") {
         // 이미지 로그 출력 제거
       }
 
       const newElement = {
-        ...elementData,
-        id: generateId(),
+        ...cleanElementData,
+        id: cleanElementData.id || generateId(),
         selected: true,
-        // z-index 정보 추가 - 항상 최상단에 위치하도록
-        zIndex: elements.length + 1,
+        // z-index는 기본적으로 elements.length + 1이지만, elementData에 zIndex가 지정되어 있으면 그것을 사용
+        zIndex:
+          cleanElementData.zIndex !== undefined
+            ? cleanElementData.zIndex
+            : baseElements.length + 1,
       };
 
       // 기존 요소들의 selected 속성만 변경하고 순서는 유지
       const updatedElements = [
-        ...elements.map((e) => ({ ...e, selected: false })),
+        ...baseElements.map((e) => ({ ...e, selected: false })),
         newElement,
       ];
 
@@ -316,8 +324,10 @@ export const useEditorStore = create((set, get) => ({
 
       // 최소한의 로그만 유지
       console.log(
-        `요소 추가 완료: ${elementData.type}, z-index: ${newElement.zIndex}`
+        `요소 추가 완료: ${cleanElementData.type}, z-index: ${newElement.zIndex}`
       );
+
+      return newElement;
     });
   },
 

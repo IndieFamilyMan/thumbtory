@@ -104,44 +104,6 @@ export function Footer() {
                   placeholder="파일명 (예: my-blog-thumbnail)"
                 />
               </div>
-              <div>
-                <label className="block text-sm mb-1">대체 텍스트 (alt)</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={seoInfo.altText}
-                  onChange={(e) =>
-                    setSeoInfo({ ...seoInfo, altText: e.target.value })
-                  }
-                  placeholder="이미지 설명 (예: 2024 봄 패션 트렌드)"
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-1">
-                  키워드 (쉼표로 구분)
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={seoInfo.keywords}
-                  onChange={(e) =>
-                    setSeoInfo({ ...seoInfo, keywords: e.target.value })
-                  }
-                  placeholder="패션, 트렌드, 봄"
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-1">설명</label>
-                <textarea
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={seoInfo.description}
-                  onChange={(e) =>
-                    setSeoInfo({ ...seoInfo, description: e.target.value })
-                  }
-                  placeholder="이미지에 대한 상세 설명"
-                  rows={3}
-                />
-              </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button
