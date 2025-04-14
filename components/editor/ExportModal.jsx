@@ -185,34 +185,44 @@ export function ExportModal({ onClose, onExport }) {
           : format === "webp"
           ? "image/webp"
           : "image/jpeg";
-      const quality = format === "jpeg" ? 0.92 : 1.0;
+
+      // SEO 최적화를 위한 품질 설정
+      // - JPEG: 0.85 (웹 최적화 권장 품질, 파일 크기와 시각적 품질의 균형)
+      // - WebP: 0.85 (파일 크기 절약하면서 높은 품질 유지)
+      // - PNG: 압축률 대신 색상 수 조절 (8비트 vs 24비트)
+      const quality = format === "jpeg" || format === "webp" ? 0.85 : 1.0;
 
       // 파일명
       const fileName = `${sanitizedFilename}-${timestamp}.${format}`;
 
-      // 캔버스를 데이터 URL로 변환
+      // 캔버스를 데이터 URL로 변환 (디바이스 픽셀 비율 고려한 고품질 출력)
       const dataURL = canvas.toDataURL({
         format: format,
         quality: quality,
-        multiplier: 2, // 고화질 출력
+        multiplier: format === "jpeg" ? 1.5 : 2, // JPEG는 파일 크기 제한을 위해 1.5배, 나머지는 2배 해상도
+        enableRetinaScaling: true, // 레티나 디스플레이 지원
       });
 
       // 메타데이터를 포함한 이미지 데이터 생성
       const img = new Image();
       img.src = dataURL;
 
-      // 이미지에 메타데이터 설정
+      // SEO 최적화를 위한 이미지 메타데이터 설정
       if (metadata.altText) {
         img.alt = metadata.altText;
       }
       if (metadata.description) {
         img.setAttribute("data-description", metadata.description);
+        // Open Graph 메타데이터 지원
+        img.setAttribute("data-og-description", metadata.description);
       }
       if (metadata.keywords && metadata.keywords.length > 0) {
         img.setAttribute("data-keywords", metadata.keywords.join(","));
       }
       if (metadata.title) {
         img.setAttribute("data-title", metadata.title);
+        // Open Graph 메타데이터 지원
+        img.setAttribute("data-og-title", metadata.title);
       }
       if (metadata.author) {
         img.setAttribute("data-author", metadata.author);
@@ -258,24 +268,28 @@ export function ExportModal({ onClose, onExport }) {
       }
     >
       <div
-        className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-full mx-auto overflow-auto"
+        className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full mx-auto overflow-auto"
         style={{
-          maxWidth: "420px",
+          maxWidth: "450px",
           maxHeight: "calc(90vh - 2rem)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold mb-4">이미지 내보내기</h2>
+        <h2 className="text-xl font-semibold mb-6 pb-2 border-b border-gray-200 dark:border-gray-700">
+          이미지 내보내기
+        </h2>
         <form onSubmit={handleSubmit}>
           <div
-            className="space-y-4 overflow-y-auto"
+            className="space-y-5 overflow-y-auto mb-6"
             style={{ maxHeight: "60vh" }}
           >
             <div>
-              <label className="block text-sm mb-1">파일명 *</label>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                파일명 *
+              </label>
               <input
                 type="text"
-                className="w-full px-3 py-2 border rounded-md"
+                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors dark:bg-gray-700 dark:text-white"
                 value={metaData.filename}
                 onChange={(e) =>
                   setMetaData({ ...metaData, filename: e.target.value })
@@ -286,7 +300,9 @@ export function ExportModal({ onClose, onExport }) {
             </div>
 
             <div>
-              <label className="block text-sm mb-1">파일 형식</label>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                파일 형식
+              </label>
               <div className="flex flex-wrap gap-4 mt-2">
                 <label className="flex items-center">
                   <input
@@ -308,7 +324,7 @@ export function ExportModal({ onClose, onExport }) {
                     onChange={() => setExportFormat("jpeg")}
                     className="mr-2"
                   />
-                  JPEG (고압축)
+                  JPEG (SEO 최적화)
                 </label>
                 <label className="flex items-center">
                   <input
@@ -319,26 +335,89 @@ export function ExportModal({ onClose, onExport }) {
                     onChange={() => setExportFormat("webp")}
                     className="mr-2"
                   />
-                  WebP
+                  WebP (최신 최적화)
                 </label>
               </div>
+              <p className="text-xs text-gray-500 mt-2">
+                SEO 최적화를 위해서는 JPEG 형식(85% 품질)이 권장됩니다. 웹
+                페이지 로딩 속도 개선을 위한 최적의 압축률로 설정되어 있습니다.
+              </p>
             </div>
           </div>
-          <div className="flex justify-end gap-2 mt-6">
+          <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
-              className="px-4 py-2 text-sm border rounded-md hover:bg-muted"
+              className="px-4 py-2.5 min-w-[100px] text-sm font-medium flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-600 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-300 shadow-sm cursor-pointer"
               onClick={onClose}
               disabled={isExporting}
             >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="lucide lucide-x"
+              >
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
               취소
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              className="px-4 py-2.5 min-w-[120px] text-sm font-medium flex items-center justify-center gap-2 bg-blue-600 text-white rounded-md transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed border border-blue-700 shadow-sm cursor-pointer"
               disabled={isExporting}
             >
-              {isExporting ? "내보내는 중..." : "내보내기"}
+              {isExporting ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  내보내는 중...
+                </>
+              ) : (
+                <>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="lucide lucide-download"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  내보내기
+                </>
+              )}
             </button>
           </div>
         </form>

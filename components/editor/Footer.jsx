@@ -108,14 +108,14 @@ export function Footer() {
             <div className="flex justify-end gap-2 mt-6">
               <button
                 type="button"
-                className="px-4 py-2 text-sm border rounded-md hover:bg-muted"
+                className="px-4 py-2 text-sm border rounded-md hover:bg-muted cursor-pointer"
                 onClick={onClose}
               >
                 취소
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
               >
                 확인
               </button>
@@ -133,7 +133,9 @@ export function Footer() {
       saveTemplate(templateName);
       toast({
         title: "템플릿 저장 완료",
-        description: "템플릿이 성공적으로 저장되었습니다.",
+        description:
+          "텍스트, 도형 등의 요소 특성이 저장되었습니다. (이미지 데이터는 제외)",
+        duration: 5000,
       });
     }
   };
@@ -149,16 +151,16 @@ export function Footer() {
   };
 
   return (
-    <div className="border-t border-border bg-muted/10">
+    <div className="border-2 border-border bg-muted/10 mt-4">
       <div className="container mx-auto px-4 py-4 flex flex-wrap items-center justify-center gap-4">
         <div className="flex items-center gap-4 justify-center">
           <button
-            className="p-3 sm:p-2 rounded-md text-base hover:bg-muted flex items-center gap-2"
+            className="p-3 sm:p-2 rounded-md text-base hover:bg-muted flex items-center gap-2 cursor-pointer"
             onClick={handleShowExportModal}
-            title="SEO 설정 및 이미지 다운로드"
+            title="이미지 다운로드"
           >
             <ImageDown className="w-10 h-10 sm:w-8 sm:h-8" />
-            SEO 설정 및 이미지 다운로드
+            이미지 다운로드
           </button>
         </div>
       </div>

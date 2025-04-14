@@ -109,7 +109,9 @@ export default function EditorPage() {
       saveTemplate(templateName);
       toast({
         title: "템플릿 저장 완료",
-        description: "템플릿이 성공적으로 저장되었습니다.",
+        description:
+          "텍스트, 도형 등의 요소 특성이 저장되었습니다. (이미지 데이터는 제외)",
+        duration: 5000,
       });
     }
   };
@@ -200,15 +202,16 @@ export default function EditorPage() {
       </header>
 
       {/* 모바일, 데스크탑 모두 동일한 수직 레이아웃 사용 */}
-      <div className="flex flex-col flex-1 overflow-auto pb-16">
+      <div className="flex flex-col flex-1 overflow-auto pb-16 m-5">
         {/* 플랫폼 설정 */}
         <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">플랫폼 설정</h2>
+          <h2 className="font-medium text-lg mb-4 text-center">플랫폼 설정</h2>
           <div className="flex flex-col">
             <div className="relative w-full max-w-md mb-4">
-              <div className="relative">
+              <div className="relative group">
                 <select
-                  className="appearance-none block w-full bg-background border border-border rounded-md py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  id="platform-select"
+                  className="appearance-none block w-full bg-background border border-border rounded-md py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-pointer hover:border-primary transition-colors group-hover:border-primary"
                   value={activePlatformId}
                   onChange={(e) => {
                     try {
@@ -253,9 +256,9 @@ export default function EditorPage() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-primary/80 group-hover:text-primary transition-colors">
                   <svg
-                    className="w-5 h-5 text-muted-foreground"
+                    className="w-6 h-6 animate-pulse group-hover:animate-none"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -264,11 +267,12 @@ export default function EditorPage() {
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      strokeWidth="2"
+                      strokeWidth="2.5"
                       d="M19 9l-7 7-7-7"
                     ></path>
                   </svg>
                 </div>
+                <div className="absolute top-0 left-0 w-full h-full bg-primary/5 opacity-0 group-hover:opacity-100 rounded-md pointer-events-none transition-opacity"></div>
               </div>
             </div>
 
@@ -286,7 +290,6 @@ export default function EditorPage() {
 
         {/* 텍스트, 요소 - 캔버스 */}
         <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">캔버스</h2>
           <div
             className="flex items-center justify-center bg-muted/20 rounded-md p-4"
             style={{
@@ -328,8 +331,8 @@ export default function EditorPage() {
         {/* Footer 컴포넌트 추가 */}
         <Footer />
         {/* 요소 편집기 영역 - 선택된 요소 타입에 따라 적절한 편집기가 표시됨 */}
-        <div className="p-6 border-b">
-          <h2 className="font-medium text-lg mb-4">요소 편집</h2>
+        <div className="p-6 mt-3 border-b border-border border-2 ">
+          <h2 className="text-center font-medium text-lg mb-4">요소 편집</h2>
           <EditorPanel
             canvas={fabricCanvas}
             onElementUpdated={(element) => {

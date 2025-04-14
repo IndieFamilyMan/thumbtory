@@ -604,7 +604,7 @@ export function ToolbarLeft({ isMobileView = false }) {
       <div className="flex flex-col gap-3">
         <div className="flex flex-nowrap w-full px-1 py-3 gap-3">
           <button
-            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px] cursor-pointer"
             onClick={handleImageButtonClick}
           >
             <span className="text-xs">이미지</span>
@@ -624,19 +624,19 @@ export function ToolbarLeft({ isMobileView = false }) {
             onChange={handleImageBgSelect}
           />
           <button
-            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px] cursor-pointer"
             onClick={handleAddText}
           >
             <span className="text-xs">텍스트</span>
           </button>
           <button
-            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px] cursor-pointer"
             onClick={handleAddShape}
           >
             <span className="text-xs">도형</span>
           </button>
           <button
-            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px] cursor-pointer"
             onClick={handleAddIcon}
           >
             <span className="text-xs">아이콘</span>
@@ -655,13 +655,13 @@ export function ToolbarLeft({ isMobileView = false }) {
                 setBackground({ type: "color", value: e.target.value })
               }
             />
-            <button className="w-full h-full flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30">
+            <button className="w-full h-full flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 cursor-pointer">
               <span className="text-xs">배경색</span>
             </button>
           </div>
           {/* 배경 이미지 업로드 버튼 */}
           <button
-            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px]"
+            className="flex-1 flex flex-col items-center justify-center p-3 bg-white border rounded-md hover:bg-muted/30 min-w-[70px] cursor-pointer"
             onClick={handleBackgroundImageButtonClick}
           >
             <span className="text-xs">배경</span>
@@ -674,7 +674,7 @@ export function ToolbarLeft({ isMobileView = false }) {
             <div className="flex gap-2">
               <Button
                 variant="secondary"
-                className="flex-1 flex items-center justify-center gap-1 py-2"
+                className="flex-1 flex items-center justify-center gap-1 py-2 cursor-pointer"
                 onClick={handleMoveElementUp}
                 disabled={isElementAtTop()}
                 title="선택한 요소를 위로 이동"
@@ -684,7 +684,7 @@ export function ToolbarLeft({ isMobileView = false }) {
               </Button>
               <Button
                 variant="secondary"
-                className="flex-1 flex items-center justify-center gap-1 py-2"
+                className="flex-1 flex items-center justify-center gap-1 py-2 cursor-pointer"
                 onClick={handleMoveElementDown}
                 disabled={isElementAtBottom()}
                 title="선택한 요소를 아래로 이동"
@@ -694,7 +694,7 @@ export function ToolbarLeft({ isMobileView = false }) {
               </Button>
               <Button
                 variant="destructive"
-                className="flex-1 flex items-center justify-center gap-1 py-2"
+                className="flex-1 flex items-center justify-center gap-1 py-2 cursor-pointer"
                 onClick={handleDelete}
                 title="선택된 요소 삭제"
               >

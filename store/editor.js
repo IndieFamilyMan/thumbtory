@@ -509,18 +509,93 @@ export const useEditorStore = create((set, get) => ({
 
   // 템플릿 관리
   saveTemplate: (name) => {
-    const { elements, background, templates } = get();
+    const { elements, background, templates, activePlatformId, platforms } =
+      get();
+
+    // 요소 특성만 추출 (실제 이미지 데이터 제외)
+    const optimizedElements = elements.map((element) => {
+      // 기본 스타일 및 위치 정보
+      const baseStyle = {
+        id: element.id,
+        type: element.type,
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        rotation: element.rotation || 0,
+        zIndex: element.zIndex || 0,
+      };
+
+      // 요소 유형에 따른 추가 스타일 정보
+      if (element.type === "text") {
+        return {
+          ...baseStyle,
+          text: element.text, // 텍스트 내용
+          fontSize: element.fontSize,
+          fontFamily: element.fontFamily,
+          fontWeight: element.fontWeight,
+          fontStyle: element.fontStyle,
+          fill: element.fill,
+          stroke: element.stroke,
+          strokeWidth: element.strokeWidth,
+          textAlign: element.textAlign,
+          underline: element.underline,
+        };
+      } else if (element.type === "image") {
+        return {
+          ...baseStyle,
+          // 이미지 실제 데이터 대신 placeholder 표시
+          imageType: "placeholder",
+          aspectRatio: element.width / element.height,
+          placeholderText: "이미지 요소 (이미지 추가 필요)",
+        };
+      } else if (element.type === "shape") {
+        return {
+          ...baseStyle,
+          shape: element.shape,
+          fill: element.fill,
+          stroke: element.stroke,
+          strokeWidth: element.strokeWidth,
+        };
+      }
+
+      return baseStyle;
+    });
+
+    // 플랫폼 정보
+    const platformSettings = {
+      id: activePlatformId,
+      width: platforms.find((p) => p.id === activePlatformId)?.width,
+      height: platforms.find((p) => p.id === activePlatformId)?.height,
+    };
+
+    // 배경은 색상 정보만 저장
+    const optimizedBackground =
+      background?.type === "color"
+        ? { type: "color", value: background.value }
+        : { type: "placeholder", value: "#ffffff" };
+
     const newTemplate = {
       id: generateId(),
       name,
       thumbnail: "", // TODO: 썸네일 생성 로직 추가
-      background,
-      elements,
+      platform: platformSettings,
+      background: optimizedBackground,
+      elements: optimizedElements,
+      createdAt: new Date().toISOString(),
     };
 
     set({
       templates: [...templates, newTemplate],
     });
+
+    console.log(
+      "템플릿 저장 완료:",
+      name,
+      "요소 수:",
+      optimizedElements.length
+    );
+    return newTemplate;
   },
 
   loadTemplate: (id) => {
@@ -529,10 +604,58 @@ export const useEditorStore = create((set, get) => ({
       const template = templates.find((t) => t.id === id);
 
       if (template) {
-        set({
-          elements: template.elements,
-          background: template.background,
+        // 플랫폼 설정 적용
+        if (template.platform && template.platform.id) {
+          set({ activePlatformId: template.platform.id });
+        }
+
+        // 요소 로드 - 이미지 요소는 placeholder로 표시
+        const processedElements = template.elements.map((element) => {
+          if (element.type === "image" && element.imageType === "placeholder") {
+            // 실제 이미지 대신 placeholder 표시
+            return {
+              ...element,
+              isPlaceholder: true,
+              // src 속성이 없으면 기본 placeholder 이미지 URL 제공
+              src: "/images/placeholder-image.png",
+            };
+          }
+          return element;
         });
+
+        // 배경 설정
+        const processedBackground =
+          template.background.type === "placeholder"
+            ? { type: "color", value: "#ffffff" }
+            : template.background;
+
+        // 상태 업데이트
+        set({
+          elements: processedElements,
+          background: processedBackground,
+        });
+
+        // 사용자에게 안내 메시지 표시
+        if (processedElements.some((el) => el.isPlaceholder)) {
+          // toast 컴포넌트가 있다면 사용, 없으면 console 메시지로 대체
+          try {
+            const { toast } = require("@/hooks/use-toast");
+            toast({
+              title: "템플릿 로드 완료",
+              description: "이미지 요소는 새로 추가해주세요.",
+              duration: 5000,
+            });
+          } catch (e) {
+            console.info("템플릿 로드 완료. 이미지 요소는 새로 추가해주세요.");
+          }
+        }
+
+        console.log(
+          "템플릿 로드 완료:",
+          template.name,
+          "요소 수:",
+          processedElements.length
+        );
       }
     });
   },
